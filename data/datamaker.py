@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import os
 import os.path as osp
 import random
@@ -26,6 +26,10 @@ class DataMaker:
         )
         
         self.test_lb = self.__get_test_data__(test_dir=test_dir)
+    
+        self.train_lb_cnt = self.__get_count__(self.train_lb, lb=True)
+        self.train_ulb_cnt = self.__get_count__(self.train_ulb, lb=False)
+        self.test_lb_cnt = self.__get_count__(self.test_lb, lb=True)
         
     def __get_train_data__(self, train_dir, num_labeled, ulb_dir=None):
         
@@ -89,7 +93,18 @@ class DataMaker:
         
         return test_lb
         
+    @staticmethod
+    def __get_count__(data, lb=True):
         
+        cnt_data = defaultdict(int)
+        for dp in data:
+            if lb:
+                cnt_data[dp.label] += 1
+            else:
+                cnt_data[-1] += 1
+        
+        return cnt_data
+    
 if __name__ == '__main__':
     
     root = 'data_download'

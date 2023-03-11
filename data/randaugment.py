@@ -113,31 +113,13 @@ def CutoutAbs(img, v):
     return img
 
     
-def augment_list():  
-    l = [
-        (AutoContrast, 0, 1),
-        (Brightness, 0.05, 0.95),
-        (Color, 0.05, 0.95),
-        (Contrast, 0.05, 0.95),
-        (Equalize, 0, 1),
-        (Identity, 0, 1),
-        (Posterize, 4, 8),
-        (Rotate, -30, 30),
-        (Sharpness, 0.05, 0.95),
-        (ShearX, -0.3, 0.3),
-        (ShearY, -0.3, 0.3),
-        (Solarize, 0, 256),
-        (TranslateX, -0.3, 0.3),
-        (TranslateY, -0.3, 0.3)
-    ]
-    return l
-
 class RandAugment:
     
     def __init__(self, n, m):
         
         self.n = n
         self.m = m
+        self.augment_list = self.__get_aug_list__()
     
     def __get_aug_list__(self):
         

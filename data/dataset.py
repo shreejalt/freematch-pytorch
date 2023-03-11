@@ -16,7 +16,8 @@ class MyDataset(Dataset):
         convert_one_hot=False,
     ):
         
-        assert train_weak_tfm is not None
+        if train:
+            assert train_weak_tfm is not None
         
         self.train = train
         self.data = data
@@ -38,7 +39,7 @@ class MyDataset(Dataset):
         impath, label = self.data[idx]
         
         img = Image.open(impath).convert("RGB")
-        img_s = torch.empty((img.size), dtype=img.dtype)
+        img_s = torch.empty((img.size))
         
         if self.train:
             img_w = self.train_weak_tfm(img)
@@ -50,7 +51,7 @@ class MyDataset(Dataset):
         
         if self.convert_one_hot:
             label = self.__convert_one_hot__(label, self.num_classes)
-            
+
         return {
             'img_w': img_w,
             'label': label,
