@@ -15,7 +15,7 @@ class TensorBoardLogger:
         for key, value in tb_dict.items():
             self.writer.add_scalar(key, value, it)
 
-class Logger:
+class ConsoleLogger:
     """Write console output to external text file.
     Imported from `<https://github.com/Cysu/open-reid/blob/master/reid/utils/logging.py>`_
     Args:
@@ -74,4 +74,4 @@ def setup_logger(output=None):
         # make sure the existing log file is not over-written
         fpath += time.strftime("-%Y-%m-%d-%H-%M-%S")
 
-    sys.stdout = Logger(fpath)
+    sys.stdout = ConsoleLogger(fpath)

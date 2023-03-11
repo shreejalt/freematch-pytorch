@@ -4,6 +4,25 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tabulate import tabulate
 
+
+class InfiniteDataLoader(DataLoader): 
+    '''Infitely loading the batch from the dataset
+    '''
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dset_iter = super().__iter__()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            batch = next(self.dset_iter)
+        except StopIteration:
+            self.dataset_iterator = super().__iter__()
+            batch = next(self.dset_iter)
+        return batch
+
 class FreeMatchDataManager:
     
     def __init__(
@@ -52,7 +71,7 @@ class FreeMatchDataManager:
         
         self.train_lb_dl = self.__get_dataloader__(train_lb_data, cfg.TRAIN_BATCH_SIZE, cfg.NUM_WORKERS)
         self.train_ulb_dl = self.__get_dataloader__(train_ulb_data, cfg.TRAIN_BATCH_SIZE * cfg.URATIO, cfg.NUM_WORKERS)
-        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS)
+        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS, shuffle=False)
 
     @staticmethod 
     def __get_data_dist__(data_lb, num_classes):
@@ -62,7 +81,7 @@ class FreeMatchDataManager:
             dist[dt.label] += 1
         dist /= dist.sum()
         
-        return dist.tolist()
+        return dist
         
     @property
     def data_statistics(self):
@@ -77,12 +96,13 @@ class FreeMatchDataManager:
         print('Unlabeled data: %d' % self.train_ulb_cnt[-1])
     
     @staticmethod
-    def __get_dataloader__(data, batch_size, num_workers):
+    def __get_dataloader__(data, batch_size, num_workers, shuffle=True):
         
-        return DataLoader(
+        return InfiniteDataLoader(
             data,
             batch_size=batch_size,
-            num_workers=num_workers
+            num_workers=num_workers,
+            shuffle=shuffle
         )
         
     @staticmethod
