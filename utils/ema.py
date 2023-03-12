@@ -1,42 +1,49 @@
+import torch
+import torch.nn as nn
+from copy import deepcopy
+from collections import OrderedDict
 
-class EMA:
-   
-    """
-    Implementation from https://fyubang.com/2019/06/01/ema/
-    """
 
-    def __init__(self, model, decay):
+class EMA(nn.Module):
+
+    def __init__(self, model, ema_decay=0.999):
+
+        super(EMA, self).__init__()
+
         self.model = model
-        self.decay = decay
-        self.shadow = {}
-        self.backup = {}
+        self.decay = ema_decay
+        self.ema = deepcopy(self.model)
 
-    def load(self, ema_model):
-        for name, param in ema_model.named_parameters():
-            self.shadow[name] = param.data.clone()
+        for _, param in self.ema.named_parameters():
+            param.detach_()
 
-    def register(self):
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                self.shadow[name] = param.data.clone()
-
+    @torch.no_grad()
     def update(self):
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                assert name in self.shadow
-                new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
-                self.shadow[name] = new_average.clone()
 
-    def apply_shadow(self):
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                assert name in self.shadow
-                self.backup[name] = param.data
-                param.data = self.shadow[name]
+        if self.training:
 
-    def restore(self):
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                assert name in self.backup
-                param.data = self.backup[name]
-        self.backup = {}
+            model_params = OrderedDict(self.model.named_parameters())
+            ema_params = OrderedDict(self.model.named_parameters())
+
+            assert model_params.keys() == ema_params.keys()
+
+            for name, param in model_params.keys():
+                if param.requires_grad:
+                    ema_params[name] = self.decay * ema_params[name] + (1. - self.decay) * model_params[name]
+            
+            # Copy buffers if any like grad values to ema model
+            model_buffers = OrderedDict(self.model.named_buffers())
+            ema_buffers = OrderedDict(self.ema.named_buffers())
+
+            assert model_buffers.keys() == ema_buffers.keys()
+
+            for name, buffer in model_buffers.items():
+                ema_buffers[name].copy_(buffer)
+        else:
+            raise AssertionError ('EMA can only be updated during training')
+        
+    def forward(self, x, fc_flag=False, feat_flag=False):
+        if self.training:
+            return self.model(x, fc_flag=fc_flag, feat_flag=feat_flag)
+        else:
+            return self.ema(x, fc_flag=fc_flag, feat_flag=feat_flag)
