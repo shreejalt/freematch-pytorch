@@ -9,8 +9,28 @@ from networks import avail_models
 from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA
 
 
+class CELoss(nn.Module):
+    
+    def __init__(self):
+        super(CELoss, self).__init__()
+        
+    def forward(self, logits, targets, reduction='none'):
+        
+        if logits.shape == targets.shape:
+            preds = F.log_softmax(logits, dim=-1)
+            nll_loss = torch.sum(-targets * preds, dim=1)
+            if reduction == 'none':
+                return nll_loss
+            return nll_loss.mean()
+        else:
+            preds = F.log_softmax(logits, dim=-1)
+            return F.nll_loss(preds, targets, reduction=reduction)
+            
 class ConsistencyLoss(nn.Module):
 
+    def __init__(self):
+        super(ConsistencyLoss, self).__init__()
+        
     def forward(logits, targets, mask=None):
         preds = F.log_softmax(logits, dim=-1)
         loss = F.nll_loss(preds, targets, reduction='none')
@@ -24,10 +44,38 @@ class SelfAdaptiveFairnessLoss(nn.Module):
     def __init__(self):
         super(SelfAdaptiveFairnessLoss, self).__init__()
 
-    def forward(mask, logits_ulb_s, p_t, label_hist):
-        pass
+    def forward(self, mask, logits_ulb_s, p_t, label_hist):
+        
+        # Take high confidence examples based on Eq 7 of the paper
+        logits_ulb_s = logits_ulb_s[mask.bool()]
+        probs_ulb_s = torch.softmax(logits_ulb_s)
+        max_probs_s, max_idx_s = torch.max(probs_ulb_s, dim=-1, keepdim=True)
+        
+        # Calculate the histogram of strong logits acc. to Eq. 9
+        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1]).to(logits_ulb_s.dtype)
+        histogram /= histogram.sum()
 
-
+        # Eq. 11 of the paper.
+        p_t = p_t.reshape(1, -1)
+        label_hist = label_hist.reshape(1, -1)
+        
+        scaler_p_t = self.__check__nans__(1 / label_hist).detach()
+        modulate_p_t = p_t * scaler_p_t
+        modulate_p_t /= modulate_p_t.sum(dim=-1, keepdim=True)
+        
+        scaler_prob_s = self.__check__nans__(1 / histogram).detach()
+        modulate_prob_s = probs_ulb_s.mean(dim=0, keepdim=True) * scaler_prob_s
+        modulate_prob_s /= modulate_prob_s.sum(dim=-1, keepdim=True)
+        
+        loss = (modulate_p_t * torch.log(modulate_prob_s + 1e-9)).sum(dim=1).mean()
+        
+        return loss, histogram.mean()
+        
+    @staticmethod
+    def __check__nans__(x):
+        x[x == float('inf')] = 0.0
+        return x
+    
 
 class SelfAdaptiveThresholdLoss(nn.Module):
 
@@ -53,7 +101,7 @@ class SelfAdaptiveThresholdLoss(nn.Module):
 
         loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
 
-        return loss, mask
+        return loss, mask, tau_t, p_t, label_hist
 
 class FreeMatchTrainer:
 
@@ -95,8 +143,8 @@ class FreeMatchTrainer:
             )
         
         # Build available dataloaders
-        dm = FreeMatchDataManager(cfg.DATASET)
-        dm.data_statistics
+        self.dm = FreeMatchDataManager(cfg.DATASET)
+        self.dm.data_statistics
 
         # Build the optimizer and scheduler
         self.optim = FreeMatchOptimizer(self.model, cfg.OPTIMIZER)
@@ -115,16 +163,44 @@ class FreeMatchTrainer:
         self.label_hist = torch.ones(cfg.DATASET.NUM_CLASSES) / cfg.DATASET.NUM_CLASSES
         self.tau_t = self.p_t.mean()
 
-        amp = nullcontext
+        self.amp = nullcontext
         if cfg.TRAINER.AMP_ENABLED:
-            scaler = GradScaler()
-            amp = autocast
+            self.scaler = GradScaler()
+            self.amp = autocast
 
         # Load Model if resume is true
         if cfg.CONT_TRAIN:
             print('Loading model from the path: %s' % cfg.RESUME)
             self.__load__model__(cfg.RESUME)
 
+    
+    def train(self):
+
+        self.model.train()
+        
+        while self.curr_iter < self.num_train_iters:
+            
+            batch_lb, batch_ulb = next(self.dm.train_lb_dl), next(self.dm.train_ulb_dl)
+            
+            img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
+            img_ulb_w, img_ulb_s = batch_ulb['img_w'], batch_ulb['img_s']
+            
+            
+            img_lb_w, img_ulb_w, img_ulb_s = 
+            num_lb = img_lb_w.shape[0]
+            num_ulb = img_ulb_w.shape[0]
+            
+            assert num_lb == img_ulb_s.shape[0]
+            
+            img = torch.cat([img_lb_w, img_ulb_w, img_ulb_s])
+            
+            with self.amp():
+                
+                logits = self.model(img)
+                logits_lb = logits[:num_lb]
+                logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
+                
+                    
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
 
         save_dict = {
