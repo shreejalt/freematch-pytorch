@@ -42,6 +42,9 @@ class EMA(nn.Module):
         else:
             raise AssertionError ('EMA can only be updated during training')
         
+    def zero_grad(self):
+        self.model.zero_grad()
+        
     def forward(self, x, fc_flag=False, feat_flag=False):
         if self.training:
             return self.model(x, fc_flag=fc_flag, feat_flag=feat_flag)

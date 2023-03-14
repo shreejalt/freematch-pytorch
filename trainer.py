@@ -154,6 +154,11 @@ class FreeMatchTrainer:
             num_warmup_iters=self.num_warmup_iters
         )
 
+        # Initializing the loss functions
+        self.sat_criterion = SelfAdaptiveThresholdLoss()
+        self.ce_criterion = CELoss()
+        self.saf_criterion = SelfAdaptiveFairnessLoss()
+        
         # Initialize the class params
         self.curr_iter = 0
         self.best_test_iter = -1
@@ -185,8 +190,6 @@ class FreeMatchTrainer:
             img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
             img_ulb_w, img_ulb_s = batch_ulb['img_w'], batch_ulb['img_s']
             
-            
-            img_lb_w, img_ulb_w, img_ulb_s = 
             num_lb = img_lb_w.shape[0]
             num_ulb = img_ulb_w.shape[0]
             
@@ -199,8 +202,28 @@ class FreeMatchTrainer:
                 logits = self.model(img)
                 logits_lb = logits[:num_lb]
                 logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
+                loss_lb = self.ce_criterion(logits_lb, label_lb, reduction='mean')
+                loss_sat, mask, self.tau_t, self.p_t, self.label_hist = self.sat_criterion(
+                    logits_ulb_w, logits_ulb_s, self.tau_t, self.p_t, self.label_hist
+                )
                 
-                    
+                loss_saf, hist_p_ulb_s = self.saf_criterion(mask, logits_ulb_s, self.p_t, self.label_hist)
+                
+                loss = loss_lb + self.ulb_loss_ratio * loss_sat + self.ent_loss_ratio * loss_saf
+                
+            if self.cfg.TRAINER.AMP_ENABLED:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optim.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optim.step()
+            
+            self.sched.step()
+            self.model.update()
+            self.model.zero_grad()   
+            
+                             
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
 
         save_dict = {
