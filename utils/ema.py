@@ -41,7 +41,7 @@ class EMA(nn.Module):
                 ema_buffers[name].copy_(buffer)
         else:
             raise AssertionError ('EMA can only be updated during training')
-        
+    
     def zero_grad(self):
         self.model.zero_grad()
         

@@ -28,6 +28,9 @@ class FreeMatchOptimizer:
     def step(self):    
         self.optimizer.step()
     
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
     def __repr__(self):
 
         return (f'Name: {self.name} lr: {self.lr} momentum: {self.momentum} weight decay: {self.weight_decay}')

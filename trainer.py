@@ -221,9 +221,29 @@ class FreeMatchTrainer:
             
             self.sched.step()
             self.model.update()
-            self.model.zero_grad()   
-            
-                             
+            self.optim.zero_grad()
+
+            # Logging in tensorboard
+            log_dict = {
+                'train/lb_loss': loss_lb.item(),
+                'train/sat_loss': loss_sat.item(),
+                'train/saf_loss': loss_saf.item(),
+                'train/total_loss': loss.item(),
+                'train/tau_t': self.tau_t.item(),
+                'train/p_t': self.p_t.mean().item(),
+                'train/label_hist': self.label_hist.mean().item(),
+                'train/label_hist_s': hist_p_ulb_s.mean().item(),
+                'train/lr': self.optim.optimizer.param_groups[0]['lr']
+            }           
+
+            self.curr_iter += 1
+
+    @torch.no_grad()
+    def validate(self):
+
+        self.model.eval()
+        
+
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
 
         save_dict = {
