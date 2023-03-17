@@ -8,6 +8,9 @@ class TensorBoardLogger:
     
     def __init__(self, fpath=None, filename=''):
         
+        if not osp.exists(osp.join(fpath, filename)):
+            os.makedirs(osp.join(fpath, filename))
+
         self.writer = SummaryWriter(osp.join(fpath, filename))
     
     def update(self, tb_dict, it):
@@ -64,14 +67,16 @@ class ConsoleLogger:
 def setup_logger(output=None):
     if output is None:
         return
-
+    
+    if not osp.exists(output):    
+        os.makedirs(output)
+    
     if output.endswith(".txt") or output.endswith(".log"):
         fpath = output
     else:
         fpath = osp.join(output, "log.txt")
 
-    if osp.exists(fpath):
-        # make sure the existing log file is not over-written
-        fpath += time.strftime("-%Y-%m-%d-%H-%M-%S")
+    # make sure the existing log file is not over-written
+    fpath += time.strftime("-%Y-%m-%d-%H-%M-%S")
 
     sys.stdout = ConsoleLogger(fpath)

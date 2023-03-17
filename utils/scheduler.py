@@ -15,7 +15,7 @@ class FreeMatchScheduler:
         self.num_warmup_iters = num_warmup_iters
 
         self.scheduler = LambdaLR(
-            optimizer=optimizer,
+            optimizer=optimizer.optimizer,
             lr_lambda=self.__lr__step__,
             last_epoch=-1
         )

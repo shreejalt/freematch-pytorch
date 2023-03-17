@@ -8,7 +8,6 @@ from data import FreeMatchDataManager
 from networks import avail_models
 from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA
 
-
 class CELoss(nn.Module):
     
     def __init__(self):
@@ -114,7 +113,7 @@ class FreeMatchTrainer:
 
         # Gathering the freematch training params.
         self.num_train_iters = cfg.TRAINER.NUM_TRAIN_ITERS
-        self.num_eval_iters = cfg.TRAINER.NgUM_EVAL_ITERS
+        self.num_eval_iters = cfg.TRAINER.NUM_EVAL_ITERS
         self.num_warmup_iters = cfg.TRAINER.NUM_WARMUP_ITERS
         self.num_log_iters = cfg.TRAINER.NUM_LOG_ITERS
         self.use_hard_labels = cfg.TRAINER.USE_HARD_LABELS
@@ -138,8 +137,8 @@ class FreeMatchTrainer:
         # Use Tensorboard if logging is enabled
         if cfg.USE_TB:
             self.tb = TensorBoardLogger(
-                fpath=cfg.OUTPUT_DIR,
-                filename=cfg.TB_FILENAME
+                fpath=osp.join(cfg.LOG_DIR, cfg.RUN_NAME),
+                filename=cfg.TB_DIR 
             )
         
         # Build available dataloaders
@@ -155,7 +154,7 @@ class FreeMatchTrainer:
         )
 
         # Initializing the loss functions
-        self.sat_criterion = SelfAdaptiveThresholdLoss()
+        self.sat_criterion = SelfAdaptiveThresholdLoss(cfg.TRAINER.SAT_EMA)
         self.ce_criterion = CELoss()
         self.saf_criterion = SelfAdaptiveFairnessLoss()
         
@@ -229,13 +228,14 @@ class FreeMatchTrainer:
                 'train/sat_loss': loss_sat.item(),
                 'train/saf_loss': loss_saf.item(),
                 'train/total_loss': loss.item(),
+                'train/mask': 1 - mask.mean().item(),
                 'train/tau_t': self.tau_t.item(),
                 'train/p_t': self.p_t.mean().item(),
                 'train/label_hist': self.label_hist.mean().item(),
                 'train/label_hist_s': hist_p_ulb_s.mean().item(),
                 'train/lr': self.optim.optimizer.param_groups[0]['lr']
             }           
-
+            
             self.curr_iter += 1
 
     @torch.no_grad()
