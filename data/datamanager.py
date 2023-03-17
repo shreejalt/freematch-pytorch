@@ -19,7 +19,7 @@ class InfiniteDataLoader(DataLoader):
         try:
             batch = next(self.dset_iter)
         except StopIteration:
-            self.dataset_iterator = super().__iter__()
+            self.dset_iter = super().__iter__()
             batch = next(self.dset_iter)
         return batch
 

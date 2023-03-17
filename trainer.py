@@ -30,7 +30,7 @@ class ConsistencyLoss(nn.Module):
     def __init__(self):
         super(ConsistencyLoss, self).__init__()
         
-    def forward(logits, targets, mask=None):
+    def forward(self, logits, targets, mask=None):
         preds = F.log_softmax(logits, dim=-1)
         loss = F.nll_loss(preds, targets, reduction='none')
         if mask is not None:
@@ -47,8 +47,8 @@ class SelfAdaptiveFairnessLoss(nn.Module):
         
         # Take high confidence examples based on Eq 7 of the paper
         logits_ulb_s = logits_ulb_s[mask.bool()]
-        probs_ulb_s = torch.softmax(logits_ulb_s)
-        max_probs_s, max_idx_s = torch.max(probs_ulb_s, dim=-1, keepdim=True)
+        probs_ulb_s = torch.softmax(logits_ulb_s, dim=-1)
+        max_probs_s, max_idx_s = torch.max(probs_ulb_s, dim=-1)
         
         # Calculate the histogram of strong logits acc. to Eq. 9
         histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1]).to(logits_ulb_s.dtype)
@@ -87,8 +87,8 @@ class SelfAdaptiveThresholdLoss(nn.Module):
 
     def forward(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
-        probs_ulb_w = torch.softmax(logits_ulb_w).detach()
-        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1, keepdim=True)
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=1).detach()
+        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
 
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
         p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
@@ -192,13 +192,13 @@ class FreeMatchTrainer:
             num_lb = img_lb_w.shape[0]
             num_ulb = img_ulb_w.shape[0]
             
-            assert num_lb == img_ulb_s.shape[0]
+            assert num_ulb == img_ulb_s.shape[0]
             
             img = torch.cat([img_lb_w, img_ulb_w, img_ulb_s])
-            
             with self.amp():
                 
-                logits = self.model(img)
+                out = self.model(img)
+                logits = out['logits']
                 logits_lb = logits[:num_lb]
                 logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
                 loss_lb = self.ce_criterion(logits_lb, label_lb, reduction='mean')
@@ -235,7 +235,7 @@ class FreeMatchTrainer:
                 'train/label_hist_s': hist_p_ulb_s.mean().item(),
                 'train/lr': self.optim.optimizer.param_groups[0]['lr']
             }           
-            
+            print(log_dict)
             self.curr_iter += 1
 
     @torch.no_grad()

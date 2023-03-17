@@ -26,7 +26,7 @@ class FreeMatchScheduler:
     
     def __lr__step__(self, current_step):
         
-        if current_step < self.num_train_iters:
+        if current_step < self.num_warmup_iters:
             _lr = float(current_step) / float(max(1, self.num_warmup_iters))
         else:
             num_cos_steps = float(current_step - self.num_warmup_iters)

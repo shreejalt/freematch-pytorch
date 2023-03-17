@@ -82,7 +82,7 @@ def main(args):
     
     print_configs(args, cfg)
     trainer = FreeMatchTrainer(cfg)
-    
+    trainer.train()
     
 if __name__ == '__main__':
     

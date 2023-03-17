@@ -27,7 +27,7 @@ class EMA(nn.Module):
 
             assert model_params.keys() == ema_params.keys()
 
-            for name, param in model_params.keys():
+            for name, param in model_params.items():
                 if param.requires_grad:
                     ema_params[name] = self.decay * ema_params[name] + (1. - self.decay) * model_params[name]
             

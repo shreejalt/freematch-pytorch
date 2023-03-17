@@ -73,7 +73,7 @@ class WideResNet(nn.Module):
             activate_bf_res=False
         )
         
-        self.block2 = self.__make__block__(
+        self.block3 = self.__make__block__(
             nb_layers=nb_layers,
             block=BasicBlock,
             in_planes=num_channels[2],
@@ -143,7 +143,7 @@ class WideResNet(nn.Module):
                block(
                    in_planes=in_planes if i == 0 else out_planes,
                    out_planes=out_planes,
-                   stride=1 if i == 0 else stride,
+                   stride=stride if i == 0 else 1,
                    drop_rate=drop_rate,
                    activate_bf_res=activate_bf_res
                )
@@ -169,4 +169,6 @@ def wrn_28_8(num_classes, pretrained=False, pretrained_path=None):
 if __name__ == '__main__':
     
     model = wrn_28_2(num_classes=10)
+    a = torch.randn(size=(16, 3, 32, 32))
     print(model)
+    print(model(a)['feats'].shape)
