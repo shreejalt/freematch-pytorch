@@ -27,7 +27,7 @@ def print_configs(args, cfg):
             print(key)
     
     print('*' * 20)
-    print('Config File Arguments..')
+    print('Config File Arguments')
     print('*' * 20)
     print(cfg)
 

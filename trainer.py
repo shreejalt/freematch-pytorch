@@ -234,14 +234,20 @@ class FreeMatchTrainer:
                 'train/label_hist': self.label_hist.mean().item(),
                 'train/label_hist_s': hist_p_ulb_s.mean().item(),
                 'train/lr': self.optim.optimizer.param_groups[0]['lr']
-            }           
+            }            
             print(log_dict)
+            
+            if self.cfg.USE_TB and (self.curr_iter + 1) % self.num_log_iters == 0:
+                self.tb.update(log_dict, self.curr_iter)
+            
+            
             self.curr_iter += 1
 
     @torch.no_grad()
     def validate(self):
 
         self.model.eval()
+        
         
 
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
