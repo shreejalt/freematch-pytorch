@@ -16,7 +16,7 @@ class EMA(nn.Module):
 
         for _, param in self.ema.named_parameters():
             param.detach_()
-
+    
     @torch.no_grad()
     def update(self):
 

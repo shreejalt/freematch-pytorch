@@ -7,7 +7,7 @@ import os
 from contextlib import nullcontext
 from torch.cuda.amp import autocast, GradScaler
 from data import FreeMatchDataManager
-from networks import avail_models
+from networks import avail_models, wrn, build_WideResNet
 import pprint
 from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA, MetricMeter
 from sklearn.metrics import (
@@ -16,10 +16,22 @@ from sklearn.metrics import (
     accuracy_score, 
     precision_score, 
     recall_score,
-    top_k_accuracy_score, 
     f1_score
 )
 
+class CELoss:
+    
+    def __call__(self, logits, targets, reduction='none'):
+        if logits.shape == targets.shape:
+            preds = F.log_softmax(logits, dim=-1)
+            nll_loss = torch.sum(-targets * preds, dim=1)
+            if reduction == 'none':
+                return nll_loss
+            return nll_loss.mean()
+        else:
+            preds = F.log_softmax(logits, dim=-1)
+            return F.nll_loss(preds, targets, reduction=reduction)
+'''      
 class CELoss(nn.Module):
     
     def __init__(self):
@@ -36,7 +48,17 @@ class CELoss(nn.Module):
         else:
             preds = F.log_softmax(logits, dim=-1)
             return F.nll_loss(preds, targets, reduction=reduction)
-            
+'''
+class ConsistencyLoss:
+    
+    def __call__(self, logits, targets, mask=None):
+        preds = F.log_softmax(logits, dim=-1)
+        loss = F.nll_loss(preds, targets, reduction='none')
+        if mask is not None:
+            masked_loss = loss * mask.float()
+            return masked_loss.mean()
+        return loss.mean()
+'''
 class ConsistencyLoss(nn.Module):
 
     def __init__(self):
@@ -49,7 +71,42 @@ class ConsistencyLoss(nn.Module):
             masked_loss = loss * mask.float()
             return masked_loss.mean()
         return loss.mean()
+'''
+class SelfAdaptiveFairnessLoss:
+    
+    def __call__(self, mask, logits_ulb_s, p_t, label_hist):
+        
+        # Take high confidence examples based on Eq 7 of the paper
+        logits_ulb_s = logits_ulb_s[mask.bool()]
+        probs_ulb_s = torch.softmax(logits_ulb_s, dim=-1)
+        max_probs_s, max_idx_s = torch.max(probs_ulb_s, dim=-1)
+        
+        # Calculate the histogram of strong logits acc. to Eq. 9
+        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1]).to(logits_ulb_s.dtype)
+        histogram /= histogram.sum()
 
+        # Eq. 11 of the paper.
+        p_t = p_t.reshape(1, -1)
+        label_hist = label_hist.reshape(1, -1)
+        
+        scaler_p_t = self.__check__nans__(1 / label_hist).detach()
+        modulate_p_t = p_t * scaler_p_t
+        modulate_p_t /= modulate_p_t.sum(dim=-1, keepdim=True)
+        
+        scaler_prob_s = self.__check__nans__(1 / histogram).detach()
+        modulate_prob_s = probs_ulb_s.mean(dim=0, keepdim=True) * scaler_prob_s
+        modulate_prob_s /= modulate_prob_s.sum(dim=-1, keepdim=True)
+        
+        loss = (modulate_p_t * torch.log(modulate_prob_s + 1e-9)).sum(dim=1).mean()
+        
+        return loss, histogram.mean()
+
+    @staticmethod
+    def __check__nans__(x):
+        x[x == float('inf')] = 0.0
+        return x
+
+'''
 class SelfAdaptiveFairnessLoss(nn.Module):
 
     def __init__(self):
@@ -86,20 +143,19 @@ class SelfAdaptiveFairnessLoss(nn.Module):
     def __check__nans__(x):
         x[x == float('inf')] = 0.0
         return x
-    
-
-class SelfAdaptiveThresholdLoss(nn.Module):
-
+'''
+class SelfAdaptiveThresholdLoss:
     def __init__(self, sat_ema):
         
-        super(SelfAdaptiveThresholdLoss, self).__init__()
 
         self.sat_ema = sat_ema
         self.criterion = ConsistencyLoss()
 
-    def forward(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
-        probs_ulb_w = torch.softmax(logits_ulb_w, dim=1).detach()
+    def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
+
+        logits_ulb_w = logits_ulb_w.detach()
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
 
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
@@ -113,6 +169,35 @@ class SelfAdaptiveThresholdLoss(nn.Module):
         loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
 
         return loss, mask, tau_t, p_t, label_hist
+'''
+class SelfAdaptiveThresholdLoss(nn.Module):
+
+    def __init__(self, sat_ema):
+        
+        super(SelfAdaptiveThresholdLoss, self).__init__()
+
+        self.sat_ema = sat_ema
+        self.criterion = ConsistencyLoss()
+
+    @torch.no_grad()
+    def forward(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
+
+        logits_ulb_w = logits_ulb_w.detach()
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
+        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
+
+        tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
+        p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
+        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
+        label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
+
+        tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
+        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
+
+        loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
+
+        return loss, mask, tau_t, p_t, label_hist
+'''
 
 class FreeMatchTrainer:
 
@@ -134,19 +219,25 @@ class FreeMatchTrainer:
         self.ulb_loss_ratio = cfg.TRAINER.ULB_LOSS_RATIO
         self.ent_loss_ratio = cfg.TRAINER.ENT_LOSS_RATIO
         self.device = 'cuda' if cfg.USE_CUDA else 'cpu'
-       
+        
+        if self.device == 'cuda':
+            torch.cuda.set_device(0)
+            torch.backends.cudnn.benchmark = True
+            
         # Building model and setup EMA
         model = avail_models[cfg.MODEL.NAME](
             num_classes=cfg.DATASET.NUM_CLASSES,
             pretrained=cfg.MODEL.PRETRAINED,
             pretrained_path=cfg.MODEL.PRETRAINED_PATH
         )
+        
 
         self.model = EMA(
             model=model,
             ema_decay=self.ema_val
         )
         self.model = self.model.to(self.device)
+        
         # Use Tensorboard if logging is enabled
         if cfg.USE_TB:
             self.tb = TensorBoardLogger(
@@ -159,7 +250,7 @@ class FreeMatchTrainer:
         self.dm.data_statistics
 
         # Build the optimizer and scheduler
-        self.optim = FreeMatchOptimizer(model, cfg.OPTIMIZER)
+        self.optim = FreeMatchOptimizer(self.model.model, cfg.OPTIMIZER)
         self.sched = FreeMatchScheduler(
             optimizer=self.optim,
             num_train_iters=self.num_train_iters,
@@ -196,9 +287,20 @@ class FreeMatchTrainer:
     def train(self):
 
         self.model.train()
+         # for gpu profiling
+        start_batch = torch.cuda.Event(enable_timing=True)
+        end_batch = torch.cuda.Event(enable_timing=True)
+        start_run = torch.cuda.Event(enable_timing=True)
+        end_run = torch.cuda.Event(enable_timing=True)
+
+        start_batch.record()
         
         while self.curr_iter < self.num_train_iters:
             
+            end_batch.record()
+            torch.cuda.synchronize()
+            start_run.record()
+
             batch_lb, batch_ulb = next(self.dm.train_lb_dl), next(self.dm.train_ulb_dl)
             
             img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
@@ -216,6 +318,7 @@ class FreeMatchTrainer:
             with self.amp():
                 
                 out = self.model(img)
+              
                 logits = out['logits']
                 logits_lb = logits[:num_lb]
                 logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
@@ -223,11 +326,9 @@ class FreeMatchTrainer:
                 loss_sat, mask, self.tau_t, self.p_t, self.label_hist = self.sat_criterion(
                     logits_ulb_w, logits_ulb_s, self.tau_t, self.p_t, self.label_hist
                 )
-                
-                loss_saf, hist_p_ulb_s = self.saf_criterion(mask, logits_ulb_s, self.p_t, self.label_hist)
-                
+                loss_saf, hist_p_ulb_s = self.saf_criterion(mask, logits_ulb_s, self.p_t, self.label_hist)                
                 loss = loss_lb + self.ulb_loss_ratio * loss_sat + self.ent_loss_ratio * loss_saf
-                
+              
             if self.cfg.TRAINER.AMP_ENABLED:
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optim.optimizer)
@@ -238,8 +339,11 @@ class FreeMatchTrainer:
             
             self.sched.step()
             self.model.update()
-            self.optim.zero_grad()
+            self.model.model.zero_grad()
 
+            end_run.record()
+            torch.cuda.synchronize()
+            
             # Logging in tensorboard
             log_dict = {
                 'train/lb_loss': loss_lb.item(),
@@ -270,18 +374,23 @@ class FreeMatchTrainer:
     
                 self.__save__model__(save_dir, 'last_checkpoint.pth')
             
-            log_dict.update(
-                        {
-                            'best_acc': self.best_test_acc,
-                            'best_iter': self.best_test_iter
-                        }
-            )
-            if (self.curr_iter + 1) % self.num_log_iters == 0:
+                log_dict.update(
+                            {
+                                'best_acc': self.best_test_acc,
+                                'best_iter': self.best_test_iter
+                            }
+                )
                 self.tb.update(log_dict, self.curr_iter)
+                
+            if (self.curr_iter + 1) % self.num_log_iters == 0:
+                
                 print('Iteration: %d / %d' % (self.curr_iter + 1, self.num_train_iters))
+                print('Fetch Time: %.3f, Run Time: %.3f' % (start_batch.elapsed_time(end_batch) / 1000, start_run.elapsed_time(end_run) / 1000 ))
                 pprint.pprint(log_dict, indent=4)
 
             self.curr_iter += 1
+            del log_dict
+            start_batch.record()
 
     @torch.no_grad()
     def validate(self):
