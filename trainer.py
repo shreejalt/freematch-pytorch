@@ -1,12 +1,24 @@
 import torch
 import torch.nn as nn
+import numpy as np
 import torch.nn.functional as F
 import os.path as osp
+import os
 from contextlib import nullcontext
 from torch.cuda.amp import autocast, GradScaler
 from data import FreeMatchDataManager
 from networks import avail_models
-from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA
+import pprint
+from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA, MetricMeter
+from sklearn.metrics import (
+    classification_report, 
+    confusion_matrix, 
+    accuracy_score, 
+    precision_score, 
+    recall_score,
+    top_k_accuracy_score, 
+    f1_score
+)
 
 class CELoss(nn.Module):
     
@@ -121,7 +133,8 @@ class FreeMatchTrainer:
         self.soft_temp = cfg.TRAINER.SOFT_TEMP
         self.ulb_loss_ratio = cfg.TRAINER.ULB_LOSS_RATIO
         self.ent_loss_ratio = cfg.TRAINER.ENT_LOSS_RATIO
-
+        self.device = 'cuda' if cfg.USE_CUDA else 'cpu'
+       
         # Building model and setup EMA
         model = avail_models[cfg.MODEL.NAME](
             num_classes=cfg.DATASET.NUM_CLASSES,
@@ -133,7 +146,7 @@ class FreeMatchTrainer:
             model=model,
             ema_decay=self.ema_val
         )
-
+        self.model = self.model.to(self.device)
         # Use Tensorboard if logging is enabled
         if cfg.USE_TB:
             self.tb = TensorBoardLogger(
@@ -146,7 +159,7 @@ class FreeMatchTrainer:
         self.dm.data_statistics
 
         # Build the optimizer and scheduler
-        self.optim = FreeMatchOptimizer(self.model, cfg.OPTIMIZER)
+        self.optim = FreeMatchOptimizer(model, cfg.OPTIMIZER)
         self.sched = FreeMatchScheduler(
             optimizer=self.optim,
             num_train_iters=self.num_train_iters,
@@ -177,7 +190,9 @@ class FreeMatchTrainer:
             print('Loading model from the path: %s' % cfg.RESUME)
             self.__load__model__(cfg.RESUME)
 
-    
+        self.__toggle__device__()
+        
+        
     def train(self):
 
         self.model.train()
@@ -188,6 +203,9 @@ class FreeMatchTrainer:
             
             img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
             img_ulb_w, img_ulb_s = batch_ulb['img_w'], batch_ulb['img_s']
+            
+            img_lb_w, label_lb = img_lb_w.to(self.device), label_lb.to(self.device) 
+            img_ulb_w, img_ulb_s = img_ulb_w.to(self.device), img_ulb_s.to(self.device)
             
             num_lb = img_lb_w.shape[0]
             num_ulb = img_ulb_w.shape[0]
@@ -234,21 +252,77 @@ class FreeMatchTrainer:
                 'train/label_hist': self.label_hist.mean().item(),
                 'train/label_hist_s': hist_p_ulb_s.mean().item(),
                 'train/lr': self.optim.optimizer.param_groups[0]['lr']
-            }            
-            print(log_dict)
+            } 
             
-            if self.cfg.USE_TB and (self.curr_iter + 1) % self.num_log_iters == 0:
+            if (self.curr_iter + 1) % self.num_eval_iters == 0:
+                
+                print('Evaluating...')
+                validate_dict = self.validate()
+                log_dict.update(validate_dict)
+                save_dir = osp.join(self.cfg.LOG_DIR, self.cfg.RUN_NAME, self.cfg.OUTPUT_DIR)
+                if not osp.exists(save_dir):
+                    os.makedirs(save_dir)
+                    
+                if validate_dict['validation/accuracy'] > self.best_test_acc:
+                    self.best_test_acc = validate_dict['validation/accuracy']
+                    self.best_test_iter = self.curr_iter
+                    self.__save__model__(save_dir, 'best_checkpoint.pth')
+    
+                self.__save__model__(save_dir, 'last_checkpoint.pth')
+            
+            log_dict.update(
+                        {
+                            'best_acc': self.best_test_acc,
+                            'best_iter': self.best_test_iter
+                        }
+            )
+            if (self.curr_iter + 1) % self.num_log_iters == 0:
                 self.tb.update(log_dict, self.curr_iter)
-            
-            
+                print('Iteration: %d / %d' % (self.curr_iter + 1, self.num_train_iters))
+                pprint.pprint(log_dict, indent=4)
+
             self.curr_iter += 1
 
     @torch.no_grad()
     def validate(self):
 
         self.model.eval()
+        total_loss, total_num = 0, 0
+        labels, preds = list(), list()
+        for _, batch in enumerate(self.dm.test_dl):
+            
+            img_lb_w, label = batch['img_w'], batch['label']
+            img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
+            out = self.model(img_lb_w)
+            logits = out['logits']
+            loss = self.ce_criterion(logits, label, reduction='mean')
+            labels.extend(label.cpu().tolist())
+            preds.extend(torch.max(logits, dim=-1)[1].cpu().tolist())
+            total_num += img_lb_w.shape[0]
+            total_loss += loss.detach().item() * total_num
+           
+        acc = accuracy_score(labels, preds)
+        precision = precision_score(labels, preds, average='macro')
+        recall = recall_score(labels, preds, average='macro')
+        f1 = f1_score(labels, preds, average='macro')       
+        cf = confusion_matrix(labels, preds)
+        cr = classification_report(labels, preds)
+
+        print('Classification Report: \n')
+        print(cr)
         
+        print('Confusion Matrix \n')
+        print(np.array_str(cf))
+
+        self.model.train()
         
+        return {
+            'validation/loss': total_loss / total_num,
+            'validation/accuracy': acc,
+            'validation/precision': precision,
+            'validation/recall': recall,
+            'validation/f1': f1
+        }
 
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
 
@@ -282,7 +356,16 @@ class FreeMatchTrainer:
         self.tau_t = ckpt['tau_t']
         self.p_t = ckpt['p_t']
         self.label_hist = ckpt['label_hist']
-        self.best_iter = ckpt['best_test_iter']
-        self.best_acc = ckpt['best_test_acc']
-
+        self.best_test_iter = ckpt['best_test_iter']
+        self.best_test_acc = ckpt['best_test_acc']
+        
+        
+        print('Initialized checkpoint parameters..')
+        print(f'Best Accuracy: {self.best_test_acc} Best Iteration: {self.best_test_iter}')
         print('Model loaded from checkpoint. Path: %s' % load_path)
+
+    def __toggle__device__(self):
+        
+        self.p_t = self.p_t.to(self.device)
+        self.tau_t = self.tau_t.to(self.device)
+        self.label_hist = self.label_hist.to(self.device)

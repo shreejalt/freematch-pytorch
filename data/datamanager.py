@@ -71,7 +71,7 @@ class FreeMatchDataManager:
         
         self.train_lb_dl = self.__get_dataloader__(train_lb_data, cfg.TRAIN_BATCH_SIZE, cfg.NUM_WORKERS)
         self.train_ulb_dl = self.__get_dataloader__(train_ulb_data, cfg.TRAIN_BATCH_SIZE * cfg.URATIO, cfg.NUM_WORKERS)
-        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS, shuffle=False)
+        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS, shuffle=False, train=False)
 
     @staticmethod 
     def __get_data_dist__(data_lb, num_classes):
@@ -96,9 +96,11 @@ class FreeMatchDataManager:
         print('Unlabeled data: %d' % self.train_ulb_cnt[-1])
     
     @staticmethod
-    def __get_dataloader__(data, batch_size, num_workers, shuffle=True):
+    def __get_dataloader__(data, batch_size, num_workers, shuffle=True, train=True):
         
-        return InfiniteDataLoader(
+        loader = DataLoader if not train else InfiniteDataLoader
+        
+        return loader(
             data,
             batch_size=batch_size,
             num_workers=num_workers,

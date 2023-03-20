@@ -1,5 +1,6 @@
 import torch
 from collections import defaultdict
+import numpy as np
 
 class AverageMeter:
     """Compute and store the average and current value.
@@ -63,9 +64,10 @@ class MetricMeter:
             )
 
         for k, v in input_dict.items():
-            if isinstance(v, torch.Tensor):
-                v = v.item()
-            self.meters[k].update(v)
+            if 'lr' not in k:
+                if isinstance(v, torch.Tensor):
+                    v = v.item()
+                self.meters[k].update(v)
 
     def __str__(self):
         output_str = []
