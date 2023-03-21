@@ -1,42 +1,65 @@
-import torch
-import torch.nn as nn
-from copy import deepcopy
 from collections import OrderedDict
 
-
-class EMA(nn.Module):
-
-    def __init__(self, model, device='cpu', ema_decay=0.999):
-
-        super(EMA, self).__init__()
-
-        self.model = model
-        self.decay = ema_decay
-        self.device = device
-        self.ema = deepcopy(self.model)
-
-        for _, param in self.ema.named_parameters():
-            param.requires_grad_(False)
-        
-    @torch.no_grad()
-    def update(self):
-
-        if self.training:
-
-            model_named_params = self.model.state_dict()
-            
-            for name, param in self.ema.state_dict().items():
-                param_ = model_named_params[name].detach()
-                param.copy_(param * self.decay + (1. - self.decay) * param_)
-
-        else:
-            raise AssertionError ('EMA can only be updated during training')
+class EMA:
     
-    def zero_grad(self):
-        self.model.zero_grad()
+    def __init__(self, model, ema_decay=0.999):
         
-    def forward(self, x, fc_flag=False, feat_flag=False):
-        if self.training:
-            return self.model(x, fc_flag=fc_flag, feat_flag=feat_flag)
-        else:
-            return self.ema(x, fc_flag=fc_flag, feat_flag=feat_flag)
+        self.model = model
+        self.ema_decay = ema_decay
+        self.ema = self.__register__()        
+        self.backup = dict()
+        self.training = True
+    
+    def state_dict(self):
+        return OrderedDict(self.ema.items())
+    
+    def load_state_dict(self, state):
+        
+        for key, value in state.items():
+            assert key in self.ema.keys()
+            self.ema[key] = value
+        
+    def train(self):
+        
+        self.model.train()
+        if not self.training:
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    assert name in self.backup
+                    param.data = self.backup[name]
+    
+            self.backup = dict()
+            self.training = True
+    
+    def eval(self):
+        
+        self.model.eval()
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.ema
+                self.backup[name] = param.data
+                param.data = self.ema[name]
+
+        self.training = False
+        
+    def __register__(self):
+        
+        self.model.train()
+        ema = dict()
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                ema[name] = param.data.clone()
+
+        return ema
+    
+    def __call__(self, x, feat_flag=None, fc_flag=None):
+        
+        return self.model(x, feat_flag, fc_flag)
+        
+    def update(self):
+        
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.ema
+                update = self.ema_decay * self.ema[name] + (1.0 - self.ema_decay) * param.data
+                self.ema[name] = update.clone()

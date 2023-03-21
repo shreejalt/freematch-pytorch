@@ -151,16 +151,23 @@ class SelfAdaptiveThresholdLoss:
         self.sat_ema = sat_ema
         self.criterion = ConsistencyLoss()
 
-    def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
-
-        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1).detach()
+    @torch.no_grad()
+    def __update__params__(self, probs_ulb_w, tau_t, p_t, label_hist):
+        
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
-
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
         p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
         histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
         label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
+        return tau_t, p_t, label_hist
+    
+    def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
+        probs_ulb_w = torch.softmax(logits_ulb_w.detach(), dim=-1)
+
+        tau_t, p_t, label_hist = self.__update__params__(probs_ulb_w, tau_t, p_t, label_hist)
+        
+        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
         mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
 
@@ -223,19 +230,18 @@ class FreeMatchTrainer:
             torch.backends.cudnn.benchmark = True
             
         # Building model and setup EMA
-        model = avail_models[cfg.MODEL.NAME](
+        self.model = avail_models[cfg.MODEL.NAME](
             num_classes=cfg.DATASET.NUM_CLASSES,
             pretrained=cfg.MODEL.PRETRAINED,
             pretrained_path=cfg.MODEL.PRETRAINED_PATH
         )
+        self.model = self.model.to(self.device)
 
-
-        self.model = EMA(
-            model=model,
-            device=self.device,
+        self.net = EMA(
+            model=self.model,
             ema_decay=self.ema_val
         )
-        self.model = self.model.to(self.device)
+        self.net.train()
         
         # Use Tensorboard if logging is enabled
         if cfg.USE_TB:
@@ -249,7 +255,7 @@ class FreeMatchTrainer:
         self.dm.data_statistics
 
         # Build the optimizer and scheduler
-        self.optim = FreeMatchOptimizer(self.model.model, cfg.OPTIMIZER)
+        self.optim = FreeMatchOptimizer(self.model, cfg.OPTIMIZER)
         self.sched = FreeMatchScheduler(
             optimizer=self.optim,
             num_train_iters=self.num_train_iters,
@@ -285,8 +291,9 @@ class FreeMatchTrainer:
         
     def train(self):
 
-        self.model.train()
-         # for gpu profiling
+        self.net.train()
+        
+        # for gpu profiling
         start_batch = torch.cuda.Event(enable_timing=True)
         end_batch = torch.cuda.Event(enable_timing=True)
         start_run = torch.cuda.Event(enable_timing=True)
@@ -314,7 +321,7 @@ class FreeMatchTrainer:
             img = torch.cat([img_lb_w, img_ulb_w, img_ulb_s])
             with self.amp():
                 
-                out = self.model(img)
+                out = self.net(img)
                 
                 logits = out['logits']
                 logits_lb = logits[:num_lb]
@@ -335,7 +342,7 @@ class FreeMatchTrainer:
                 self.optim.step()
             
             self.sched.step()
-            self.model.update()
+            self.net.update()
             self.optim.zero_grad()
 
             end_run.record()
@@ -392,14 +399,14 @@ class FreeMatchTrainer:
     @torch.no_grad()
     def validate(self):
 
-        self.model.ema.eval()
+        self.net.eval()
         total_loss, total_num = 0, 0
         labels, preds = list(), list()
         for _, batch in enumerate(self.dm.test_dl):
             
             img_lb_w, label = batch['img_w'], batch['label']
             img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
-            out = self.model(img_lb_w)
+            out = self.net(img_lb_w)
             logits = out['logits']
             loss = self.ce_criterion(logits, label, reduction='mean')
             labels.extend(label.cpu().tolist())
@@ -420,7 +427,7 @@ class FreeMatchTrainer:
         print('Confusion Matrix \n')
         print(np.array_str(cf))
 
-        self.model.train()
+        self.net.train()
         
         return {
             'validation/loss': total_loss / total_num,
@@ -433,8 +440,8 @@ class FreeMatchTrainer:
     def __save__model__(self, save_dir, save_name='latest.ckpt'):
 
         save_dict = {
-            'model_state_dict': self.model.model.state_dict(),
-            'ema_state_dict':self.model.ema.state_dict(),
+            'model_state_dict': self.net.model.state_dict(),
+            'ema_state_dict':self.net.state_dict(),
             'optimizer_state_dict': self.optim.optimizer.state_dict(),
             'scheduler_state_dict': self.sched.scheduler.state_dict(),
             'curr_iter': self.curr_iter,
@@ -452,8 +459,8 @@ class FreeMatchTrainer:
     def __load__model__(self, load_path):
 
         ckpt = torch.load(load_path)
-        self.model.model.load_state_dict(ckpt['model_state_dict'])
-        self.model.ema.load_state_dict(ckpt['ema_state_dict'])
+        self.net.model.load_state_dict(ckpt['model_state_dict'])
+        self.net.load_state_dict(ckpt['ema_state_dict'])
         self.optim.optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         self.sched.scheduler.load_state_dict(ckpt['scheduler_state_dict'])
 
