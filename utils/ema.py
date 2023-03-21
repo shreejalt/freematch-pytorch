@@ -6,39 +6,29 @@ from collections import OrderedDict
 
 class EMA(nn.Module):
 
-    def __init__(self, model, ema_decay=0.999):
+    def __init__(self, model, device='cpu', ema_decay=0.999):
 
         super(EMA, self).__init__()
 
         self.model = model
         self.decay = ema_decay
+        self.device = device
         self.ema = deepcopy(self.model)
 
         for _, param in self.ema.named_parameters():
-            param.detach_()
-    
+            param.requires_grad_(False)
+        
     @torch.no_grad()
     def update(self):
 
         if self.training:
 
-            model_params = OrderedDict(self.model.named_parameters())
-            ema_params = OrderedDict(self.model.named_parameters())
-
-            assert model_params.keys() == ema_params.keys()
-
-            for name, param in model_params.items():
-                if param.requires_grad:
-                    ema_params[name] = self.decay * ema_params[name] + (1. - self.decay) * model_params[name]
+            model_named_params = self.model.state_dict()
             
-            # Copy buffers if any like grad values to ema model
-            model_buffers = OrderedDict(self.model.named_buffers())
-            ema_buffers = OrderedDict(self.ema.named_buffers())
+            for name, param in self.ema.state_dict().items():
+                param_ = model_named_params[name].detach()
+                param.copy_(param * self.decay + (1. - self.decay) * param_)
 
-            assert model_buffers.keys() == ema_buffers.keys()
-
-            for name, buffer in model_buffers.items():
-                ema_buffers[name].copy_(buffer)
         else:
             raise AssertionError ('EMA can only be updated during training')
     

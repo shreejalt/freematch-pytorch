@@ -7,9 +7,9 @@ import os
 from contextlib import nullcontext
 from torch.cuda.amp import autocast, GradScaler
 from data import FreeMatchDataManager
-from networks import avail_models, wrn, build_WideResNet
+from networks import avail_models
 import pprint
-from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA, MetricMeter
+from utils import FreeMatchOptimizer, FreeMatchScheduler, TensorBoardLogger, EMA
 from sklearn.metrics import (
     classification_report, 
     confusion_matrix, 
@@ -151,11 +151,9 @@ class SelfAdaptiveThresholdLoss:
         self.sat_ema = sat_ema
         self.criterion = ConsistencyLoss()
 
-
     def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
-        logits_ulb_w = logits_ulb_w.detach()
-        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1).detach()
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
 
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
@@ -230,10 +228,11 @@ class FreeMatchTrainer:
             pretrained=cfg.MODEL.PRETRAINED,
             pretrained_path=cfg.MODEL.PRETRAINED_PATH
         )
-        
+
 
         self.model = EMA(
             model=model,
+            device=self.device,
             ema_decay=self.ema_val
         )
         self.model = self.model.to(self.device)
@@ -246,7 +245,7 @@ class FreeMatchTrainer:
             )
         
         # Build available dataloaders
-        self.dm = FreeMatchDataManager(cfg.DATASET)
+        self.dm = FreeMatchDataManager(cfg.DATASET, cfg.TRAINER.NUM_TRAIN_ITERS)
         self.dm.data_statistics
 
         # Build the optimizer and scheduler
@@ -295,13 +294,11 @@ class FreeMatchTrainer:
 
         start_batch.record()
         
-        while self.curr_iter < self.num_train_iters:
+        for (batch_lb, batch_ulb) in zip(self.dm.train_lb_dl, self.dm.train_ulb_dl):
             
             end_batch.record()
             torch.cuda.synchronize()
             start_run.record()
-
-            batch_lb, batch_ulb = next(self.dm.train_lb_dl), next(self.dm.train_ulb_dl)
             
             img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
             img_ulb_w, img_ulb_s = batch_ulb['img_w'], batch_ulb['img_s']
@@ -318,7 +315,7 @@ class FreeMatchTrainer:
             with self.amp():
                 
                 out = self.model(img)
-              
+                
                 logits = out['logits']
                 logits_lb = logits[:num_lb]
                 logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
@@ -339,7 +336,7 @@ class FreeMatchTrainer:
             
             self.sched.step()
             self.model.update()
-            self.model.model.zero_grad()
+            self.optim.zero_grad()
 
             end_run.record()
             torch.cuda.synchronize()
@@ -395,7 +392,7 @@ class FreeMatchTrainer:
     @torch.no_grad()
     def validate(self):
 
-        self.model.eval()
+        self.model.ema.eval()
         total_loss, total_num = 0, 0
         labels, preds = list(), list()
         for _, batch in enumerate(self.dm.test_dl):

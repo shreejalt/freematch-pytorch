@@ -1,8 +1,9 @@
-from data import DataMaker, PrepareDataset, MyDataset, RandAugment
+from data import DataMaker, MyDataset, RandAugment
 from torchvision import transforms as T
 import numpy as np
 from torch.utils.data import DataLoader
 from tabulate import tabulate
+from torch.utils.data.sampler import BatchSampler, RandomSampler, SequentialSampler
 
 
 class InfiniteDataLoader(DataLoader): 
@@ -27,14 +28,11 @@ class FreeMatchDataManager:
     
     def __init__(
         self,
-        cfg
+        cfg,
+        num_train_iters
     ):
         self.cfg = cfg
-       
-        # Download and format the data if not
-        if cfg.PREPARE:
-           prepare = PrepareDataset(name=cfg.NAME, root=cfg.DIR)
-           prepare.prepare_data()
+        self.num_train_iters = num_train_iters
            
         # Gather labeled, unlabeled, and test data
         self.datamaker = DataMaker(root=cfg.DIR, name=cfg.NAME, num_labeled=cfg.NUM_LABELED)
@@ -42,7 +40,7 @@ class FreeMatchDataManager:
         self.test_lb_cnt = self.datamaker.test_lb_cnt
         
         # Calculate the histogram of the data 
-        self.data_dist = self.__get_data_dist__(self.datamaker.train_lb, cfg.NUM_CLASSES)
+        self.data_dist = self.__get_data_dist__(self.datamaker.train_lb)
         
         train_weak_tfm, train_strong_tfm, test_tfm = self.__get_transforms__(self.cfg)
         
@@ -69,17 +67,15 @@ class FreeMatchDataManager:
             convert_one_hot=cfg.CONVERT_ONE_HOT    
         )
         
-        self.train_lb_dl = self.__get_dataloader__(train_lb_data, cfg.TRAIN_BATCH_SIZE, cfg.NUM_WORKERS)
-        self.train_ulb_dl = self.__get_dataloader__(train_ulb_data, cfg.TRAIN_BATCH_SIZE * cfg.URATIO, cfg.NUM_WORKERS)
-        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS, shuffle=False, train=False)
+        self.train_lb_dl = self.__get_dataloader__(train_lb_data, cfg.TRAIN_BATCH_SIZE, cfg.NUM_WORKERS, num_iters=self.num_train_iters)
+        self.train_ulb_dl = self.__get_dataloader__(train_ulb_data, cfg.TRAIN_BATCH_SIZE * cfg.URATIO, cfg.NUM_WORKERS, num_iters=self.num_train_iters)
+        self.test_dl = self.__get_dataloader__(test_data, cfg.TEST_BATCH_SIZE, cfg.NUM_WORKERS, train=False)
 
     @staticmethod 
-    def __get_data_dist__(data_lb, num_classes):
+    def __get_data_dist__(data_lb):
         
-        dist = np.zeros((num_classes))
-        for dt in data_lb:
-            dist[dt.label] += 1
-        dist /= dist.sum()
+        _, cnt = np.unique(data_lb['labels'], return_counts=True)
+        dist = cnt / cnt.sum()
         
         return dist
         
@@ -88,23 +84,27 @@ class FreeMatchDataManager:
         
         print('Data Statictics ...')
 
-        headers = ['Class', 'train labeled', 'test_labeled']
-        table = [['%d' % cls, '%d' % self.train_lb_cnt[cls], '%d' % self.test_lb_cnt[cls]] for cls in self.train_lb_cnt.keys()]
+        headers = ['Class', 'train labeled', 'train unlabeled', 'test labeled']
+        table = [['%d' % cls, '%d' % self.train_lb_cnt[cls], '%d' % self.train_ulb_cnt[cls], '%d' % self.test_lb_cnt[cls]] for cls in self.train_lb_cnt.keys()]
         
         print(tabulate(table, headers=headers))
-        
-        print('Unlabeled data: %d' % self.train_ulb_cnt[-1])
-    
+            
     @staticmethod
-    def __get_dataloader__(data, batch_size, num_workers, shuffle=True, train=True):
+    def __get_dataloader__(data, batch_size, num_workers, num_iters=1, train=True):
         
-        loader = DataLoader if not train else InfiniteDataLoader
+        if not train:
+            return DataLoader(
+                data,
+                batch_size=batch_size,
+                num_workers=num_workers
+            )
         
-        return loader(
+        sampler = RandomSampler(data, replacement=True, num_samples=num_iters * batch_size) 
+        batch_sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=True)
+        return DataLoader(
             data,
-            batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=shuffle
+            batch_sampler=batch_sampler,
         )
         
     @staticmethod
@@ -127,7 +127,7 @@ class FreeMatchDataManager:
                 T.Resize(cfg.IMG_SIZE),
                 T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
                 T.RandomHorizontalFlip(),
-                RandAugment(cfg.RANDAUG_M, cfg.RANDAUG_N),
+                RandAugment(cfg.RANDAUG_N, cfg.RANDAUG_M),
                 T.ToTensor(),
                 T.Normalize(cfg.PIXEL_MEAN, cfg.PIXEL_STD)
             ]

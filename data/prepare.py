@@ -32,6 +32,7 @@ class PrepareDataset:
             train_data = SVHN(self.root, split='train', download=True)
             test_data = SVHN(self.root, split='test', download=True)
         elif self.name == 'stl10':
+            
             train_data = STL10(self.root, download=True, split='train')
             test_data = STL10(self.root, download=True, split='test')
             unlabeled_data = STL10(self.root, download=True, split='unlabeled')
@@ -39,7 +40,6 @@ class PrepareDataset:
             mkdir(unlabeled_dir)
         else:
             raise ValueError('Only CIFAR10, CIFAR100, SVHN, STL10 datasets are supported.')    
-        
         
         train_dir = osp.join(self.root, self.name, 'train')
         test_dir = osp.join(self.root, self.name, 'test')
@@ -65,6 +65,7 @@ class PrepareDataset:
 
 if __name__ == '__main__':
     
-    prepare = PrepareDataset(name='stl10', root='./data_download')
+    
+    prepare = PrepareDataset(name='cifar10', root='./data_download')
     prepare.prepare_data()
     

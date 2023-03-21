@@ -3,6 +3,12 @@ from PIL import Image
 from torch.utils.data import Dataset
 import torch
 
+def pil_loader(path):
+    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+    with open(path, 'rb') as f:
+        img = Image.open(f)
+        return img.convert('RGB')
+
 class MyDataset(Dataset):
     
     def __init__(
@@ -15,6 +21,7 @@ class MyDataset(Dataset):
         train=False,
         convert_one_hot=False,
     ):
+        super(MyDataset, self).__init__()
         
         if train:
             assert train_weak_tfm is not None
@@ -32,13 +39,12 @@ class MyDataset(Dataset):
                 
     def __len__(self):
         
-        return len(self.data)
+        return len(self.data['images'])
     
     def __getitem__(self, idx):
         
-        impath, label = self.data[idx]
-        
-        img = Image.open(impath).convert("RGB")
+        img, label = self.data['images'][idx], self.data['labels'][idx]
+        img = Image.fromarray(img)
         img_s = torch.empty((img.size))
         
         if self.train:
@@ -61,7 +67,8 @@ class MyDataset(Dataset):
     @staticmethod
     def __convert_one_hot__(label, num_classes):
         
-        label_ = np.zeros(num_classes)
-        label_[label] = 1
+        label_ = np.zeros(label.shape[0], num_classes)
+        
+        label_[range(0, label.shape[0]), label] = 1.0
         return label_
         

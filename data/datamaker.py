@@ -1,109 +1,102 @@
-from collections import namedtuple, defaultdict
-import os
-import os.path as osp
+from torchvision.datasets import SVHN, STL10, CIFAR10, CIFAR100
+import numpy as np
 import random
 
-DataTuple = namedtuple('DataTuple', ('impath', 'label'))
 
 class DataMaker:
     
     def __init__(self, root, name, num_labeled=40):
         
-        self.root = root
         self.name = name
-        self.num_labeled = num_labeled
-        
-        train_dir = osp.join(root, name, 'train')
-        test_dir = osp.join(root, name, 'test')
-        ulb_dir = None
-        if name == 'stl10':
-            ulb_dir = osp.join(root, name, 'unlabeled')
-
-        self.train_lb, self.train_ulb = self.__get_train_data__(
-            train_dir=train_dir,
-            num_labeled=num_labeled,
-            ulb_dir=ulb_dir
-        )
-        
-        self.test_lb = self.__get_test_data__(test_dir=test_dir)
-    
-        self.train_lb_cnt = self.__get_count__(self.train_lb, lb=True)
-        self.train_ulb_cnt = self.__get_count__(self.train_ulb, lb=False)
-        self.test_lb_cnt = self.__get_count__(self.test_lb, lb=True)
-        
-    def __get_train_data__(self, train_dir, num_labeled, ulb_dir=None):
-        
-        classes = os.listdir(train_dir)
-        classes.sort()
-        imgs_per_class = num_labeled // len(classes)
-        per_cls_cnt = 0
-        train_lb, train_ulb = list(), list()
-        
-        for idx, cls in enumerate(classes):
+        self.root = root
+        unlabeled_data = None
+        if self.name == 'cifar10':
+            train_data = CIFAR10(self.root, download=True, train=True)
+            test_data = CIFAR10(self.root, train=False)
+        elif self.name == 'cifar100':
+            train_data = CIFAR100(self.root, download=True, train=True)
+            test_data = CIFAR100(self.root, train=False)
+        elif self.name == 'svhn':
+            train_data = SVHN(self.root, split='train', download=True)
+            test_data = SVHN(self.root, split='test', download=True)
+        elif self.name == 'stl10':
             
-            imnames = os.listdir(osp.join(train_dir, cls))
-            random.shuffle(imnames)
+            train_data = STL10(self.root, download=True, split='train')
+            test_data = STL10(self.root, download=True, split='test')
+            unlabeled_data = STL10(self.root, download=True, split='unlabeled')
+        else:
+            raise ValueError('Only CIFAR10, CIFAR100, SVHN, STL10 datasets are supported.') 
+    
+        
+        self.train_lb, self.train_ulb = self.__get__train__data(
+                train_data,
+                num_labeled=num_labeled,
+                ulb_data=unlabeled_data
+            )
+            
+        self.test_lb = self.__get_test_data__(test_data=test_data)
+        
+        self.train_lb_cnt = self.__get_count__(self.train_lb['labels'])
+        self.train_ulb_cnt = self.__get_count__(self.train_ulb['labels'])
+        self.test_lb_cnt = self.__get_count__(self.test_lb['labels'])
+    
+    def __get__train__data(self, train_data, num_labeled, ulb_data=None):
+        
+        imgs, labels = train_data.data, train_data.targets
+        imgs, labels = np.array(imgs), np.array(labels)
 
-            for imname in imnames:
-                
-                impath = osp.join(train_dir, cls, imname)
+        classes = np.unique(labels)
+        per_cls_cnt = 0
+        imgs_per_class = num_labeled // len(classes)
+        train_lb, train_lb_labels = list(), list()
+        train_ulb, train_ulb_labels = list(), list()
+        
+        for cls in classes:
+            img_idxs = np.where(labels == cls)[0]
+            
+            random.shuffle(img_idxs)
+            for idx in img_idxs:
                 if per_cls_cnt < imgs_per_class:
-                    train_lb.append(DataTuple(impath, idx))
+                    train_lb.append(imgs[idx])
+                    train_lb_labels.append(labels[idx])
                     per_cls_cnt += 1
                 else:
-                    if ulb_dir is None:
-                        train_ulb.append(DataTuple(impath, idx))
+                    if ulb_data is None:
+                        train_ulb.append(imgs[idx])
+                        train_ulb_labels.append(labels[idx])
+        
             per_cls_cnt = 0
         
-        if ulb_dir is not None:
-            train_ulb = self.__get_ulb_data__(ulb_dir=ulb_dir)
-                
-        return train_lb, train_ulb
+        if ulb_data is not None:
+            train_ulb, train_ulb_labels = np.array(ulb_data.data).astype(np.uint8), np.ones(ulb_data.shape[0]) * -1.0
 
-    def __get_ulb_data__(self, ulb_dir):
+        return (
+            {'images': np.array(train_lb).astype(np.uint8), 'labels': np.array(train_lb_labels)}, 
+            {'images': np.array(train_ulb).astype(np.uint8), 'labels': np.array(train_ulb_labels)}
+        )
+    
+    def __get_test_data__(self, test_data):
         
-        classes = os.listdir(ulb_dir)
-        train_ulb = list()
+        imgs, labels = test_data.data, test_data.targets
+        imgs, labels = np.array(imgs), np.array(labels)
         
-        for _, cls in enumerate(classes):
+        classes = np.unique(labels)
+        test_lb, test_lb_labels = list(), list()
+        
+        for cls in classes:
             
-            imnames = os.listdir(osp.join(ulb_dir, cls))
-            
-            for imname in imnames:
-                impath = osp.join(ulb_dir, cls, imname)
-                train_ulb.append(DataTuple(impath, -1))
-            
-        return train_ulb
+            img_idxs = np.where(labels == cls)[0]
+            random.shuffle(img_idxs)
+            for idx in img_idxs:
+                test_lb.append(imgs[idx])
+                test_lb_labels.append(labels[idx])
         
-    def __get_test_data__(self, test_dir):
+        return  {'images': np.array(test_lb).astype(np.uint8), 'labels': np.array(test_lb_labels)}
         
-        classes = os.listdir(test_dir)
-        classes.sort()
+    def __get_count__(self, data):
         
-        test_lb = list()
-        
-        for idx, cls in enumerate(classes):
-            
-            imnames = os.listdir(osp.join(test_dir, cls))
-            random.shuffle(imnames)
-
-            for imname in imnames:
-                impath = osp.join(test_dir, cls, imname)
-                test_lb.append(DataTuple(impath, idx))
-        
-        return test_lb
-        
-    @staticmethod
-    def __get_count__(data, lb=True):
-        
-        cnt_data = defaultdict(int)
-        for dp in data:
-            if lb:
-                cnt_data[dp.label] += 1
-            else:
-                cnt_data[-1] += 1
-        
-        return cnt_data
+        val, cnt = np.unique(data, return_counts=True)
+        return dict(zip(val, cnt))
     
 if __name__ == '__main__':
     
@@ -111,4 +104,5 @@ if __name__ == '__main__':
     name = 'cifar10'
     num_labeled = 40
     dm = DataMaker(root=root, name=name, num_labeled=num_labeled)
-    print(len(dm.train_lb), len(dm.train_ulb), len(dm.test_lb))
+    print(dm.train_lb['images'].shape, dm.train_ulb['images'].shape, dm.train_ulb['labels'].shape, dm.test_lb['labels'].shape)
+    print(dm.train_lb_cnt, dm.train_ulb_cnt, dm.test_lb_cnt)
