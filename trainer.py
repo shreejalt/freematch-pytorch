@@ -152,8 +152,9 @@ class SelfAdaptiveThresholdLoss:
         self.criterion = ConsistencyLoss()
 
     @torch.no_grad()
-    def __update__params__(self, probs_ulb_w, tau_t, p_t, label_hist):
+    def __update__params__(self, logits_ulb_w, tau_t, p_t, label_hist):
         
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
         p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
@@ -163,10 +164,10 @@ class SelfAdaptiveThresholdLoss:
     
     def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
-        probs_ulb_w = torch.softmax(logits_ulb_w.detach(), dim=-1)
-
-        tau_t, p_t, label_hist = self.__update__params__(probs_ulb_w, tau_t, p_t, label_hist)
+        tau_t, p_t, label_hist = self.__update__params__(logits_ulb_w, tau_t, p_t, label_hist)
         
+        logits_ulb_w = logits_ulb_w.detach()
+        probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
         mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
@@ -399,6 +400,7 @@ class FreeMatchTrainer:
     @torch.no_grad()
     def validate(self):
 
+        # self.model.eval()
         self.net.eval()
         total_loss, total_num = 0, 0
         labels, preds = list(), list()
@@ -407,12 +409,13 @@ class FreeMatchTrainer:
             img_lb_w, label = batch['img_w'], batch['label']
             img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
             out = self.net(img_lb_w)
+            # out = self.model(img_lb_w)
             logits = out['logits']
             loss = self.ce_criterion(logits, label, reduction='mean')
             labels.extend(label.cpu().tolist())
             preds.extend(torch.max(logits, dim=-1)[1].cpu().tolist())
             total_num += img_lb_w.shape[0]
-            total_loss += loss.detach().item() * total_num
+            total_loss += loss.detach().item() * img_lb_w.shape[0]
            
         acc = accuracy_score(labels, preds)
         precision = precision_score(labels, preds, average='macro')
@@ -428,7 +431,7 @@ class FreeMatchTrainer:
         print(np.array_str(cf))
 
         self.net.train()
-        
+        # self.model.train()
         return {
             'validation/loss': total_loss / total_num,
             'validation/accuracy': acc,

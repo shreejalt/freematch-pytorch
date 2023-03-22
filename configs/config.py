@@ -9,6 +9,7 @@ CFG.RESUME = ''
 CFG.SEED = -1
 CFG.LOG_DIR = './logs'
 CFG.USE_CUDA = True
+CFG.VALIDATE_ONLY = False
 
 CFG.USE_TB = True
 CFG.TB_DIR = 'tensorboard_runs/cifar_10_40_run_0'

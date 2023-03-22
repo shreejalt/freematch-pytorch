@@ -6,6 +6,7 @@ import os.path as osp
 from configs import CFG_default
 from utils import setup_logger
 from trainer import FreeMatchTrainer
+from tester import FreeMatchTester
 
 
 def set_random_seed(seed):
@@ -81,7 +82,10 @@ def main(args):
         torch.backends.cudnn.benchmark = True
     
     print_configs(args, cfg)
-    trainer = FreeMatchTrainer(cfg)
+    if not cfg.VALIDATE_ONLY:
+        trainer = FreeMatchTrainer(cfg)
+    else:
+        tester = FreeMatchTester(cfg)
     trainer.train()
     
 if __name__ == '__main__':
