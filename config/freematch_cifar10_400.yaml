@@ -1,19 +1,19 @@
-RUN_NAME: 'freematch_cifar10_40'
+RUN_NAME: 'freematch_cifar10_400'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
-RESUME: 'logs/freematch_cifar10_40/model_ckpt/last_checkpoint.pth'
+RESUME: 'logs/freematch_cifar10_400/model_ckpt/last_checkpoint.pth'
 SEED: -1
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True
-TB_DIR: 'tensorboard_runs/cifar_10_40_run_0'
+TB_DIR: 'tensorboard_runs/cifar_10_400_run_0'
 VALIDATE_ONLY: True
 
 DATASET:
   PREPARE: False
   DIR: 'data_download'
   NAME: 'cifar10'
-  NUM_LABELED: 40
+  NUM_LABELED: 400
   NUM_CLASSES: 10
   NUM_WORKERS: 8
   CONVERT_ONE_HOT: False

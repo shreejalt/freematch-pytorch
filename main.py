@@ -24,7 +24,7 @@ def print_configs(args, cfg):
     argkeys = list(args.__dict__.keys())
     argkeys.sort()
     for key in argkeys:
-        if args.__dict__[key] is not None:
+        if args.__dict__[key] is not None and args.__dict__[key]:
             print(key)
     
     print('*' * 20)
@@ -52,6 +52,9 @@ def overwrite_config(cfg, args):
     if args.cont_train:
         cfg.CONT_TRAIN = True
     
+    if args.validate_only:
+        cfg.VALIDATE_ONLY = True
+    
     if args.train_batch_size:
         cfg.DATASET.TRAIN_BATCH_SIZE = args.train_batch_size
     
@@ -76,7 +79,8 @@ def main(args):
         print('Training with seed initialziation..')
         set_random_seed(cfg.SEED)
     
-    setup_logger(osp.join(cfg.LOG_DIR, cfg.RUN_NAME))
+    if not cfg.VALIDATE_ONLY:
+        setup_logger(osp.join(cfg.LOG_DIR, cfg.RUN_NAME))
 
     if torch.cuda.is_available() and cfg.USE_CUDA:
         torch.backends.cudnn.benchmark = True
@@ -84,9 +88,11 @@ def main(args):
     print_configs(args, cfg)
     if not cfg.VALIDATE_ONLY:
         trainer = FreeMatchTrainer(cfg)
+        trainer.train()
     else:
         tester = FreeMatchTester(cfg)
-    trainer.train()
+        tester.test()
+    
     
 if __name__ == '__main__':
     
@@ -99,7 +105,8 @@ if __name__ == '__main__':
     parser.add_argument('--log-dir', type=str, default=None, help='Directory to save the logs')
     parser.add_argument('--tb-dir', type=str, default=None, help='Directory to save tensorboard logs')
     parser.add_argument('--resume-checkpoint', type=str, default=None, help='Resume path of the checkpoint')
-    parser.add_argument('--cont-train', action='store_true', help='Flag to continue training')
+    parser.add_argument('--cont-train', default=False, action='store_true', help='Flag to continue training')
+    parser.add_argument('--validate-only', default=False, action='store_true', help='Flag for validation only')
     
     parser.add_argument('--train-batch-size', type=int, default=None, help='Training batch size')
     parser.add_argument('--test-batch-size', type=int, default=None, help='Testing batch size')
