@@ -1,6 +1,4 @@
-import torch
 from torch.optim import SGD, AdamW
-
 
 class FreeMatchOptimizer:
     

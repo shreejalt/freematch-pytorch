@@ -3,7 +3,7 @@ from torchvision import transforms as T
 import numpy as np
 from torch.utils.data import DataLoader
 from tabulate import tabulate
-from torch.utils.data.sampler import BatchSampler, RandomSampler, SequentialSampler
+from torch.utils.data.sampler import BatchSampler, RandomSampler
 
 
 class InfiniteDataLoader(DataLoader): 
