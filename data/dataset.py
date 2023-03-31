@@ -36,7 +36,7 @@ class MyDataset(Dataset):
         self.test_tfm = test_tfm
         
         self.convert_one_hot = convert_one_hot
-                
+        
     def __len__(self):
         
         return len(self.data['images'])

@@ -21,25 +21,29 @@ class BasicBlock(nn.Module):
         self.drop_rate = drop_rate 
         self.activate_bf_res = activate_bf_res
         self.same_planes = (in_planes == out_planes)
-        self.conv_short = nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride,
-                               padding=0, bias=False) if not self.same_planes else nn.Identity()
+        
+        self.conv_short = (not self.same_planes) and nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride,
+                                                                padding=0, bias=True) or None
         
     def forward(self, x):
-        out_short = self.act1(self.bn1(x))
-        out = self.act2(self.bn2(self.conv1(out_short)))
-        if self.drop_rate > 0.0:
-            out = F.dropout(out, p=self.droprate, training=self.training)
-        out = self.conv2(out)
-        out = torch.add(
-            self.conv_short(out_short if not self.same_planes and self.activate_bf_res else x), 
-            out
-        )
         
-        return out
+        
+        if not self.same_planes and self.activate_bf_res:
+            x = self.act1(self.bn1(x))
+        else:
+            out = self.act1(self.bn1(x))
+        
+        out = self.act2(self.bn2(self.conv1(out if self.same_planes else x)))
+        
+        if self.drop_rate > 0:
+            out = F.dropout(out, p=self.drop_rate, training=self.training)
+        
+        out = self.conv2(out)
+        return torch.add(x if self.same_planes else self.conv_short(x), out)
         
 class WideResNet(nn.Module):
     
-    def __init__(self, num_classes, depth=28, widen_factor=2, drop_rate=0.0):
+    def __init__(self, num_classes, first_stride=1, depth=28, widen_factor=2, drop_rate=0.0):
         
         super(WideResNet, self).__init__()
         
@@ -168,7 +172,11 @@ def wrn_28_8(num_classes, pretrained=False, pretrained_path=None):
 
 if __name__ == '__main__':
     
+   
+    torch.manual_seed(0)
     model = wrn_28_2(num_classes=10)
-    a = torch.randn(size=(16, 3, 32, 32))
-    print(model)
-    print(model(a)['feats'].shape)
+
+    torch.manual_seed(0)
+    a = torch.randn((1, 3, 32, 32))
+    print(a)
+    print(model(a)['logits'])

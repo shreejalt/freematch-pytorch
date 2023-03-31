@@ -60,8 +60,9 @@ class FreeMatchTrainer:
 
         self.net = EMA(
             model=self.model,
-            ema_decay=self.ema_val
+            decay=self.ema_val
         )
+        # self.net.register()
         self.net.train()
         
         # Use Tensorboard if logging is enabled
@@ -111,7 +112,7 @@ class FreeMatchTrainer:
         
     def train(self):
 
-        self.net.train()
+        self.model.train()
         
         # for gpu profiling
         start_batch = torch.cuda.Event(enable_timing=True)
@@ -142,6 +143,7 @@ class FreeMatchTrainer:
             with self.amp():
                 
                 out = self.net(img)
+                # out = self.model(img)
                 
                 logits = out['logits']
                 logits_lb = logits[:num_lb]
@@ -163,7 +165,7 @@ class FreeMatchTrainer:
             
             self.sched.step()
             self.net.update()
-            self.optim.zero_grad()
+            self.model.zero_grad()
 
             end_run.record()
             torch.cuda.synchronize()
@@ -220,13 +222,17 @@ class FreeMatchTrainer:
     def validate(self):
 
         self.net.eval()
+        # self.model.eval()
+        # self.net.apply_shadow()
+        
         total_loss, total_num = 0, 0
         labels, preds = list(), list()
         for _, batch in enumerate(self.dm.test_dl):
             
             img_lb_w, label = batch['img_w'], batch['label']
             img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
-            out = self.net(img_lb_w)
+            # out = self.net(img_lb_w)
+            out = self.model(img_lb_w)
             logits = out['logits']
             loss = self.ce_criterion(logits, label, reduction='mean')
             labels.extend(label.cpu().tolist())
@@ -248,6 +254,9 @@ class FreeMatchTrainer:
         print(np.array_str(cf))
 
         self.net.train()
+        # self.net.restore()
+        # self.model.train()
+        
         return {
             'validation/loss': total_loss / total_num,
             'validation/accuracy': acc,

@@ -20,7 +20,6 @@ class DataMaker:
             train_data = SVHN(self.root, split='train', download=True)
             test_data = SVHN(self.root, split='test', download=True)
         elif self.name == 'stl10':
-            
             train_data = STL10(self.root, download=True, split='train')
             test_data = STL10(self.root, download=True, split='test')
             unlabeled_data = STL10(self.root, download=True, split='unlabeled')
@@ -46,26 +45,20 @@ class DataMaker:
         imgs, labels = np.array(imgs), np.array(labels)
 
         classes = np.unique(labels)
-        per_cls_cnt = 0
         imgs_per_class = num_labeled // len(classes)
         train_lb, train_lb_labels = list(), list()
         train_ulb, train_ulb_labels = list(), list()
         
         for cls in classes:
-            img_idxs = np.where(labels == cls)[0]
             
-            random.shuffle(img_idxs)
-            for idx in img_idxs:
-                if per_cls_cnt < imgs_per_class:
-                    train_lb.append(imgs[idx])
-                    train_lb_labels.append(labels[idx])
-                    per_cls_cnt += 1
-                else:
-                    if ulb_data is None:
-                        train_ulb.append(imgs[idx])
-                        train_ulb_labels.append(labels[idx])
-        
-            per_cls_cnt = 0
+            img_idxs = np.where(labels == cls)[0]
+            labeled_idx = np.random.choice(img_idxs, imgs_per_class, False)
+            
+            train_lb.extend(imgs[labeled_idx])
+            train_lb_labels.extend(labels[labeled_idx])
+            
+        train_ulb.extend(imgs)
+        train_ulb_labels.extend(labels)
         
         if ulb_data is not None:
             train_ulb, train_ulb_labels = np.array(ulb_data.data).astype(np.uint8), np.ones(ulb_data.shape[0]) * -1.0

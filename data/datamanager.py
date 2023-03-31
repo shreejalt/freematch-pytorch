@@ -5,25 +5,6 @@ from torch.utils.data import DataLoader
 from tabulate import tabulate
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 
-
-class InfiniteDataLoader(DataLoader): 
-    '''Infitely loading the batch from the dataset
-    '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.dset_iter = super().__iter__()
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        try:
-            batch = next(self.dset_iter)
-        except StopIteration:
-            self.dset_iter = super().__iter__()
-            batch = next(self.dset_iter)
-        return batch
-
 class FreeMatchDataManager:
     
     def __init__(
@@ -99,7 +80,7 @@ class FreeMatchDataManager:
                 num_workers=num_workers
             )
         
-        sampler = RandomSampler(data, replacement=True, num_samples=num_iters * batch_size) 
+        sampler = RandomSampler(data, replacement=True, num_samples=num_iters * batch_size, generator=None) 
         batch_sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=True)
         return DataLoader(
             data,
@@ -114,9 +95,8 @@ class FreeMatchDataManager:
         
         train_weak_tfm = T.Compose(
             [
-                T.Resize(cfg.IMG_SIZE),
-                T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
                 T.RandomHorizontalFlip(),
+                T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
                 T.ToTensor(),
                 T.Normalize(cfg.PIXEL_MEAN, cfg.PIXEL_STD)
             ]
@@ -124,10 +104,9 @@ class FreeMatchDataManager:
         
         train_strong_tfm = T.Compose(
            [
-                T.Resize(cfg.IMG_SIZE),
-                T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
-                T.RandomHorizontalFlip(),
                 RandAugment(cfg.RANDAUG_N, cfg.RANDAUG_M),
+                T.RandomHorizontalFlip(),
+                T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
                 T.ToTensor(),
                 T.Normalize(cfg.PIXEL_MEAN, cfg.PIXEL_STD)
             ]
