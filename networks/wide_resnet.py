@@ -2,6 +2,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+'''
+class BasicBlock(nn.Module):
+    
+    
+    def __init__(
+        self,
+        in_planes,
+        out_planes,
+        stride,
+        drop_rate=0.0,
+        activate_bf_res=False,
+        bn_momentum=0.001,
+        bn_eps=0.001,
+        negative_slope=0.1
+    ):
+        super(BasicBlock, self).__init__()
+        
+        self.bn1 = nn.BatchNorm2d(in_planes, momentum=bn_momentum, eps=bn_eps)
+        self.act1 = nn.LeakyReLU(negative_slope=negative_slope, inplace=False)
+        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                               padding=1, bias=True)
+    
+'''
+        
+
+
 class BasicBlock(nn.Module):
     
     def __init__(self, in_planes, out_planes, stride, drop_rate=0.0, activate_bf_res=False):
@@ -9,12 +35,12 @@ class BasicBlock(nn.Module):
         super(BasicBlock, self).__init__()
         
         self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                            padding=1, bias=False)
+                            padding=1, bias=True)
         self.bn1 =  nn.BatchNorm2d(in_planes, momentum=0.001)
         self.act1 = nn.LeakyReLU(negative_slope=0.1, inplace=False)
         
         self.conv2 = nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
+                               padding=1, bias=True)
         self.bn2 = nn.BatchNorm2d(out_planes, momentum=0.001)
         self.act2 = nn.LeakyReLU(negative_slope=0.1, inplace=False)
         
@@ -48,7 +74,7 @@ class WideResNet(nn.Module):
         super(WideResNet, self).__init__()
         
         self.num_classes = num_classes
-        self.first_stride = 1
+        self.first_stride = first_stride
         
         assert ((depth - 4) % 6 == 0)
         num_channels = [16, 16 * widen_factor, 32 * widen_factor, 64 * widen_factor]

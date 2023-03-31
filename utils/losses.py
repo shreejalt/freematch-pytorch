@@ -77,44 +77,7 @@ class SelfAdaptiveThresholdLoss:
         histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
         label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
         return tau_t, p_t, label_hist
-
-    '''
-    @torch.no_grad()
-    def __get__mask__(self, tau_t, p_t, probs_ulb_w):
-        
-        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
-        tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
-        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
-    
-        return mask
-    
-    @torch.no_grad()
-    def __update__params__(self, probs_ulb_w, tau_t, p_t, label_hist):
-        
-        max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
-        tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
-        p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
-        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
-        label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
-        return tau_t, p_t, label_hist
-    
-    def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
-        
-        with torch.no_grad():
-            probs_ulb_w = torch.softmax(logits_ulb_w.detach(), dim=-1)
-       
-        tau_t, p_t, label_hist = self.__update__params__(probs_ulb_w, tau_t, p_t, label_hist)
-        mask = self.__get__mask__(tau_t, p_t, probs_ulb_w)
-        
-        with torch.no_grad():
-            logits_ulb_w = logits_ulb_w.detach()
-            max_idx_w = torch.argmax(logits_ulb_w, dim=-1)
-            
-        loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
-        return loss, mask, tau_t, p_t, label_hist
-    '''
-    
-
+   
     def __call__(self, logits_ulb_w, logits_ulb_s, tau_t, p_t, label_hist):
 
         tau_t, p_t, label_hist = self.__update__params__(logits_ulb_w, tau_t, p_t, label_hist)

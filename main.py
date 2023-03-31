@@ -13,7 +13,7 @@ def set_random_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
 
 def print_configs(args, cfg):
     
@@ -27,6 +27,7 @@ def print_configs(args, cfg):
         if args.__dict__[key] is not None and args.__dict__[key]:
             print(key)
     
+    print('\n\n')
     print('*' * 20)
     print('Config File Arguments')
     print('*' * 20)
