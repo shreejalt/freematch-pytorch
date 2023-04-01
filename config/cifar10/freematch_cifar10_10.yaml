@@ -1,4 +1,4 @@
-RUN_NAME: 'freematch_cifar10_10'
+RUN_NAME: 'freematch_cifar10_10_1'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_10/model_ckpt/last_checkpoint.pth'
@@ -6,7 +6,7 @@ SEED: 0
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True
-TB_DIR: 'tensorboard_runs/cifar_10_10_run_0'
+TB_DIR: 'tensorboard_runs/cifar_10_10_run_1'
 VALIDATE_ONLY: False
 
 DATASET:
@@ -29,7 +29,7 @@ DATASET:
 
 MODEL:
 
-  NAME: 'wrn_28_2_v2'
+  NAME: 'wrn_28_2'
   PRETRAINED: False
   PRETRAINED_PATH: ''
 

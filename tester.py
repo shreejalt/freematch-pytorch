@@ -115,4 +115,3 @@ class FreeMatchTester:
         print('** Confusion Matrix **\n', file=file_name)
         print(cm, file=file_name)
         file_name.close()
-        
