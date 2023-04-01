@@ -1,0 +1,56 @@
+RUN_NAME: 'freematch_cifar100_10000'
+OUTPUT_DIR: 'model_ckpt'
+CONT_TRAIN: False
+RESUME: 'logs/freematch_cifar100_10000/model_ckpt/last_checkpoint.pth'
+SEED: -1
+LOG_DIR: 'logs'
+USE_CUDA: True
+USE_TB: True
+TB_DIR: 'tensorboard_runs/cifar_100_10000_run_0'
+VALIDATE_ONLY: False
+
+DATASET:
+  PREPARE: False
+  DIR: 'data_download'
+  NAME: 'cifar100'
+  NUM_LABELED: 10000
+  NUM_CLASSES: 10
+  NUM_WORKERS: 8
+  CONVERT_ONE_HOT: False
+  IMG_SIZE: 32
+  URATIO: 7
+  TRAIN_BATCH_SIZE: 64
+  TEST_BATCH_SIZE: 512
+  CROP_RATIO: 0.875
+  PIXEL_MEAN: [0.507, 0.486, 0.440]
+  PIXEL_STD: [0.267, 0.256, 0.276]
+  RANDAUG_N: 3
+  RANDAUG_M: 5
+
+MODEL:
+
+  NAME: 'wrn_28_8'
+  PRETRAINED: False
+  PRETRAINED_PATH: ''
+
+OPTIMIZER:
+
+  NAME: 'SGD'
+  LR: 0.03
+  MOMENTUM: 0.9
+  NESTEROV: True
+  WEIGHT_DECAY: 0.001
+  SKIP_BN: True
+
+TRAINER:
+
+  SAT_EMA: 0.999
+  AMP_ENABLED: True
+  NUM_WARMUP_ITERS: 0
+  NUM_TRAIN_ITERS: 1048576 # 2^20
+  NUM_EVAL_ITERS: 512
+  NUM_LOG_ITERS: 64
+  EMA_VAL: 0.999
+  ULB_LOSS_RATIO: 1.0
+  ENT_LOSS_RATIO: 0.05
+

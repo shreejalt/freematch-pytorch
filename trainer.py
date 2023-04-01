@@ -57,12 +57,13 @@ class FreeMatchTrainer:
             pretrained_path=cfg.MODEL.PRETRAINED_PATH
         )
         self.model = self.model.to(self.device)
-
+        self.model.train()
+        
         self.net = EMA(
             model=self.model,
-            ema_decay=self.ema_val
+            decay=self.ema_val
         )
-        # self.net.register()
+
         self.net.train()
         
         # Use Tensorboard if logging is enabled
@@ -81,7 +82,6 @@ class FreeMatchTrainer:
         self.sched = FreeMatchScheduler(
             optimizer=self.optim,
             num_train_iters=self.num_train_iters,
-            num_warmup_iters=self.num_warmup_iters
         )
 
         # Initializing the loss functions
@@ -109,9 +109,74 @@ class FreeMatchTrainer:
 
         self.__toggle__device__()
         
+    
+    def warmup_train(self):
         
-    def train(self):
+        # Mainly of SVHN training...
+        self.model.train()
+        
+        # for gpu profiling
+        start_batch = torch.cuda.Event(enable_timing=True)
+        end_batch = torch.cuda.Event(enable_timing=True)
+        start_run = torch.cuda.Event(enable_timing=True)
+        end_run = torch.cuda.Event(enable_timing=True)
+    
+        start_batch.record()
+        
+        for batch_lb in self.dm.train_lb_dl:
+            
+            if self.curr_iter >= self.num_warmup_iters:
+                self.curr_iter = 0
+                break
+            
+            end_batch.record()
+            torch.cuda.synchronize()
+            start_run.record()
+            
+            img_lb_w, label_lb = batch_lb['img_w'], batch_lb['label']
+            img_lb_w, label_lb = img_lb_w.to(self.device), label_lb.to(self.device) 
 
+            with self.amp():
+                out = self.net(img_lb_w)                
+                logits = out['logits']
+                loss = self.ce_criterion(logits, label_lb, reduction='mean')
+            
+            if self.cfg.TRAINER.AMP_ENABLED:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optim.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optim.step()
+            
+            end_run.record()
+            torch.cuda.synchronize()
+            
+            log_dict = {
+                'warmup/loss': loss.item(),
+                'warmup/lr': self.optim.optimizer.param_groups[0]['lr'],
+                'warmup/fetch_time': start_batch.elapsed_time(end_batch) / 1000,
+                'warmup/run_time': start_run.elapsed_time(end_run) / 1000
+            }
+            
+            if (self.curr_iter + 1) % self.num_log_iters == 0:
+                pprint.pprint(log_dict, indent=4)
+            
+            self.curr_iter += 1
+            del log_dict
+            start_batch.record()
+            
+    def train(self):
+        
+        if self.num_warmup_iters > 0:
+            print('Starting warmup training on labeled data...')
+            self.warmup_train()
+            print('Evaluating after warmup')
+            validate_dict = self.validate()
+            pprint.pprint(validate_dict, indent=4)
+        
+        print('Starting model training...')
+        
         self.model.train()
         
         # for gpu profiling
@@ -124,6 +189,9 @@ class FreeMatchTrainer:
         
         for (batch_lb, batch_ulb) in zip(self.dm.train_lb_dl, self.dm.train_ulb_dl):
             
+            if self.curr_iter >= self.num_train_iters:
+                break
+                
             end_batch.record()
             torch.cuda.synchronize()
             start_run.record()
@@ -142,7 +210,7 @@ class FreeMatchTrainer:
             img = torch.cat([img_lb_w, img_ulb_w, img_ulb_s])
             with self.amp():
                 
-                out = self.net(img)                
+                out = self.net(img)    
                 logits = out['logits']
                 logits_lb = logits[:num_lb]
                 logits_ulb_w, logits_ulb_s = logits[num_lb:].chunk(2)
@@ -228,6 +296,7 @@ class FreeMatchTrainer:
             img_lb_w, label = batch['img_w'], batch['label']
             img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
             out = self.net(img_lb_w)
+            
             logits = out['logits']
             loss = self.ce_criterion(logits, label, reduction='mean')
             labels.extend(label.cpu().tolist())

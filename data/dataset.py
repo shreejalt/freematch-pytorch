@@ -3,12 +3,6 @@ from PIL import Image
 from torch.utils.data import Dataset
 import torch
 
-def pil_loader(path):
-    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        return img.convert('RGB')
-
 class MyDataset(Dataset):
     
     def __init__(
@@ -68,7 +62,6 @@ class MyDataset(Dataset):
     def __convert_one_hot__(label, num_classes):
         
         label_ = np.zeros(label.shape[0], num_classes)
-        
         label_[range(0, label.shape[0]), label] = 1.0
         return label_
         

@@ -1,11 +1,12 @@
 from collections import OrderedDict
 
+
 class EMA:
     
-    def __init__(self, model, ema_decay=0.999):
+    def __init__(self, model, decay=0.999):
         
         self.model = model
-        self.ema_decay = ema_decay
+        self.ema_decay = decay
         self.ema = self.__register__()        
         self.backup = dict()
         self.training = True
@@ -65,3 +66,4 @@ class EMA:
     def __call__(self, x, feat_flag=None, fc_flag=None):
         
         return self.model(x, feat_flag, fc_flag)
+

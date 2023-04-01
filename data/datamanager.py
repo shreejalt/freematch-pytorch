@@ -65,9 +65,14 @@ class FreeMatchDataManager:
         
         print('Data Statictics ...')
 
-        headers = ['Class', 'train labeled', 'train unlabeled', 'test labeled']
-        table = [['%d' % cls, '%d' % self.train_lb_cnt[cls], '%d' % self.train_ulb_cnt[cls], '%d' % self.test_lb_cnt[cls]] for cls in self.train_lb_cnt.keys()]
-        
+        if self.cfg.NAME != 'svhn':
+            headers = ['Class', 'train labeled', 'train unlabeled', 'test labeled']
+            table = [['%d' % cls, '%d' % self.train_lb_cnt[cls], '%d' % self.train_ulb_cnt[cls], '%d' % self.test_lb_cnt[cls]] for cls in self.train_lb_cnt.keys()]
+        else:
+            headers = ['Class', 'train labeled', 'test labeled']
+            table = [['%d' % cls, '%d' % self.train_lb_cnt[cls], '%d' % self.test_lb_cnt[cls]] for cls in self.train_lb_cnt.keys()]
+            print('Unlabeled data: %d', self.train_ulb_cnt[-1])
+            
         print(tabulate(table, headers=headers))
             
     @staticmethod

@@ -26,7 +26,6 @@ class DataMaker:
         else:
             raise ValueError('Only CIFAR10, CIFAR100, SVHN, STL10 datasets are supported.') 
     
-        
         self.train_lb, self.train_ulb = self.__get__train__data(
                 train_data,
                 num_labeled=num_labeled,
