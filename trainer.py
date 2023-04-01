@@ -106,10 +106,16 @@ class FreeMatchTrainer:
         if cfg.CONT_TRAIN:
             print('Loading model from the path: %s' % cfg.RESUME)
             self.__load__model__(cfg.RESUME)
-
+            
+        if self.num_warmup_iters > 0:
+            print('Starting warmup training on labeled data...')
+            self.warmup_train()
+            print('Evaluating after warmup')
+            validate_dict = self.validate()
+            pprint.pprint(validate_dict, indent=4)
+        
         self.__toggle__device__()
         
-    
     def warmup_train(self):
         
         # Mainly of SVHN training...
@@ -165,16 +171,27 @@ class FreeMatchTrainer:
             self.curr_iter += 1
             del log_dict
             start_batch.record()
-            
+    
+            self.model.eval()
+            probs = list()
+            with torch.no_grad():
+                for _, batch in enumerate(self.dm.test_dl):
+                    img_lb_w, label = batch['img_w'], batch['label']
+                    img_lb_w, label = img_lb_w.to(self.device), label.to(self.device)
+                    out = self.model(img_lb_w)
+                    logits = out['logits']
+                    probs.append(logits.softmax(dim=-1))
+                    
+            probs = torch.cat(probs)
+            max_probs, max_idx = torch.max(probs, dim=-1)
+
+            self.tau_t = max_probs.mean()
+            self.p_t = torch.mean(probs, dim=0)
+            label_hist = torch.bincount(max_idx, minlength=probs.shape[1]).to(probs.dtype) 
+            self.label_hist = label_hist / label_hist.sum()
+
     def train(self):
-        
-        if self.num_warmup_iters > 0:
-            print('Starting warmup training on labeled data...')
-            self.warmup_train()
-            print('Evaluating after warmup')
-            validate_dict = self.validate()
-            pprint.pprint(validate_dict, indent=4)
-        
+    
         print('Starting model training...')
         
         self.model.train()
