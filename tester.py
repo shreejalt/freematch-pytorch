@@ -45,7 +45,7 @@ class FreeMatchTester:
 
         self.net = EMA(
             model=self.model,
-            ema_decay=self.ema_val
+            decay=self.ema_val
         )
         self.net.train()
         
