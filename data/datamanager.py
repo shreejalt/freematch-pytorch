@@ -109,7 +109,7 @@ class FreeMatchDataManager:
         
         train_strong_tfm = T.Compose(
            [
-                RandAugment(cfg.RANDAUG_N, cfg.RANDAUG_M),
+                RandAugment(cfg.RANDAUG_N),
                 T.RandomHorizontalFlip(),
                 T.RandomCrop([cfg.IMG_SIZE, cfg.IMG_SIZE], padding=int(cfg.IMG_SIZE * (1 - cfg.CROP_RATIO)), padding_mode='reflect'),
                 T.ToTensor(),

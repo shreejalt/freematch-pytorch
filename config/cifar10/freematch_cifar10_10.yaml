@@ -1,4 +1,4 @@
-RUN_NAME: 'freematch_cifar10_10_1'
+RUN_NAME: 'freematch_cifar10_10'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_10/model_ckpt/last_checkpoint.pth'
@@ -25,7 +25,6 @@ DATASET:
   PIXEL_MEAN: [0.4913, 0.4823, 0.4466]
   PIXEL_STD: [0.2470, 0.2435, 0.2615]
   RANDAUG_N: 3
-  RANDAUG_M: 5
 
 MODEL:
 

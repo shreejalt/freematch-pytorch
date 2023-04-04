@@ -2,7 +2,7 @@ RUN_NAME: 'freematch_cifar10_250'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_250/model_ckpt/last_checkpoint.pth'
-SEED: -1
+SEED: 0
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True
@@ -25,7 +25,6 @@ DATASET:
   PIXEL_MEAN: [0.485, 0.456, 0.406]
   PIXEL_STD: [0.229, 0.224, 0.225]
   RANDAUG_N: 3
-  RANDAUG_M: 5
 
 MODEL:
 

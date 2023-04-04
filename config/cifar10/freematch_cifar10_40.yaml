@@ -2,12 +2,12 @@ RUN_NAME: 'freematch_cifar10_40'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_40/model_ckpt/last_checkpoint.pth'
-SEED: -1
+SEED: 0
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True
 TB_DIR: 'tensorboard_runs/cifar_10_40_run_0'
-VALIDATE_ONLY: True
+VALIDATE_ONLY: False
 
 DATASET:
   PREPARE: False
@@ -22,13 +22,11 @@ DATASET:
   TRAIN_BATCH_SIZE: 64
   TEST_BATCH_SIZE: 512
   CROP_RATIO: 0.875
-  PIXEL_MEAN: [0.485, 0.456, 0.406]
-  PIXEL_STD: [0.229, 0.224, 0.225]
+  PIXEL_MEAN: [0.4913, 0.4823, 0.4466]
+  PIXEL_STD: [0.2470, 0.2435, 0.2615]
   RANDAUG_N: 3
-  RANDAUG_M: 5
 
 MODEL:
-
   NAME: 'wrn_28_2'
   PRETRAINED: False
   PRETRAINED_PATH: ''
@@ -53,4 +51,3 @@ TRAINER:
   EMA_VAL: 0.999
   ULB_LOSS_RATIO: 1.0
   ENT_LOSS_RATIO: 0.05
-

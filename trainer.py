@@ -356,7 +356,7 @@ class FreeMatchTrainer:
             'best_test_acc': self.best_test_acc,
             'tau_t': self.tau_t.cpu(),
             'p_t': self.p_t.cpu(),
-            'label_hist': self.p_t.cpu()
+            'label_hist': self.label_hist.cpu()
         }
 
         torch.save(save_dict, osp.join(save_dir, save_name))

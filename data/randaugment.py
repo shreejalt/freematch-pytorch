@@ -115,10 +115,9 @@ def CutoutAbs(img, v):
     
 class RandAugment:
     
-    def __init__(self, n, m):
+    def __init__(self, n):
         
         self.n = n
-        self.m = m
         self.augment_list = self.__get_aug_list__()
     
     def __get_aug_list__(self):
