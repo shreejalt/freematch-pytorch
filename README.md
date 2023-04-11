@@ -67,7 +67,8 @@ Note that, you need to add `--validate-only` flag everytime you want to test you
 
 I ran all the experiments on CIFAR10 dataset using Mixed Precision Training in PyTorch. The below given table shows the reproduced results and the original published results. Also, all the training are logged using TensorBoard which can be used to visualize the loss curves. 
 
-The official repository can be found from this [link](https://github.com/microsoft/Semi-supervised-learning)
+The official repository can be found from this [link](https://github.com/microsoft/Semi-supervised-learning). Some of the ideas are taken from the official repository's FreeMatch implementation.
+
 
 | Method             | Num Labeled: 10 | Num Labeled: 40 | Num Labeled: 250 | Num Labeled: 4000 |
 | ------------------ | --------------- | --------------- | ---------------- | ----------------- |
