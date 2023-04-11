@@ -18,7 +18,7 @@ All the theorems, propositions, and the proof are taken from the paper by Wang e
 
 ### Running the scripts
 
-All the config files for CIFAR10 and CIFAR100 are present in the `config` folder. It follows the `yacs` format inspired from [Dassl.pytorch](https://github.com/KaiyangZhou/Dassl.pytorch). You can visit the given link to learn more about `yacs.config.CfgNode` structure. 
+All the config files for CIFAR10 and CIFAR100 are present in the `config` folder. It follows the `yacs` and logging format inspired from [Dassl.pytorch](https://github.com/KaiyangZhou/Dassl.pytorch). You can visit the given link to learn more about `yacs.config.CfgNode` structure. 
 
 The script `main.py` contains argument parser which can be used to overwrite the config file of the experiment. 
 
