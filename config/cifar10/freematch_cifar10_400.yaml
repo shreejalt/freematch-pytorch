@@ -2,7 +2,7 @@ RUN_NAME: 'freematch_cifar10_400'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_400/model_ckpt/last_checkpoint.pth'
-SEED: -1
+SEED: 0
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True

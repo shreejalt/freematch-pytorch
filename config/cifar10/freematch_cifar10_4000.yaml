@@ -2,12 +2,12 @@ RUN_NAME: 'freematch_cifar10_4000'
 OUTPUT_DIR: 'model_ckpt'
 CONT_TRAIN: False
 RESUME: 'logs/freematch_cifar10_4000/model_ckpt/last_checkpoint.pth'
-SEED: -1
+SEED: 0
 LOG_DIR: 'logs'
 USE_CUDA: True
 USE_TB: True
 TB_DIR: 'tensorboard_runs/cifar_10_4000_run_0'
-VALIDATE_ONLY: True
+VALIDATE_ONLY: False
 
 DATASET:
   PREPARE: False

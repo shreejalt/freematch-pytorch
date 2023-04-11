@@ -44,6 +44,7 @@ class FreeMatchTester:
             pretrained=cfg.MODEL.PRETRAINED,
             pretrained_path=cfg.MODEL.PRETRAINED_PATH
         )
+        
         self.model = self.model.to(self.device)
 
         self.net = EMA(
