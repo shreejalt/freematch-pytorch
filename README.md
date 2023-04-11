@@ -139,5 +139,23 @@ weighted avg       0.93      0.93      0.93     10000
   booktitle = {Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track}
   year = {2022}
 }
+
+@article{zhou2022domain,
+  title={Domain generalization: A survey},
+  author={Zhou, Kaiyang and Liu, Ziwei and Qiao, Yu and Xiang, Tao and Loy, Chen Change},
+  journal={IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  year={2022},
+  publisher={IEEE}
+}
+
+@article{zhou2021domain,
+  title={Domain adaptive ensemble learning},
+  author={Zhou, Kaiyang and Yang, Yongxin and Qiao, Yu and Xiang, Tao},
+  journal={IEEE Transactions on Image Processing},
+  volume={30},
+  pages={8008--8018},
+  year={2021},
+  publisher={IEEE}
+}
 ```
 
