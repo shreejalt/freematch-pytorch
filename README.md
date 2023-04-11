@@ -14,7 +14,7 @@ All the theorems, propositions, and the proof are taken from the paper by Wang e
 
 1. `git clone https://github.com/shreejalt/freematch-pytorch`
 2. `cd freematch-pytorch && install_anaconda.sh`
-3. `conda env create -f environment.yaml`
+3. `conda env create -f environment.yml`
 
 ### Running the scripts
 
