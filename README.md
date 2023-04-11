@@ -76,7 +76,7 @@ The official repository can be found from this [link](https://github.com/microso
 
 Once the testing is over, all the results will be stored in `LOG_DIR/RUN_NAME` folder present in the `config` file. Below given are some of the results on the CIFAR10 (10) dataset with the checkpoint report given in blocks.
 
-<p float="left">
+<p float="center">
   <img src="./_images/confusion_matrix_10.jpg" height="400" width="500"/>
   <img src="./_images/roc_10.jpg" height="400" width="500" /> 
 
