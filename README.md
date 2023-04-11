@@ -49,13 +49,17 @@ optional arguments:
   --seed SEED           Seed
 ```
 
-To execute the training, execute the command `python3 main.py --config-file config/cifar10/freematch_cifar10_10.yaml`
+To execute the training, execute the command 
+
+`python3 main.py --config-file config/cifar10/freematch_cifar10_10.yaml`
 
 This will start the training by running the `train()` function in `trainer.py`. 
 
 
 
-You can also use your model checkpoints to validate the results. Run the command `python3 main.py --validate-only --config-file config/cifar10/freematch_cifar10_10.yaml --resume logs/freematch_cifar10_10/model_ckpt/best_checkpoint.pth`. 
+You can also use your model checkpoints to validate the results. Run the command <br\>
+
+`python3 main.py --validate-only --config-file config/cifar10/freematch_cifar10_10.yaml --resume logs/freematch_cifar10_10/model_ckpt/best_checkpoint.pth`. 
 
 
 
