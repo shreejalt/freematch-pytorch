@@ -36,7 +36,7 @@ class SelfAdaptiveFairnessLoss:
         max_idx_s = torch.argmax(probs_ulb_s, dim=-1)
         
         # Calculate the histogram of strong logits acc. to Eq. 9
-        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1]).to(logits_ulb_s.dtype)
+        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1])
         histogram /= histogram.sum()
 
         # Eq. 11 of the paper.
@@ -74,7 +74,7 @@ class SelfAdaptiveThresholdLoss:
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
         p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
-        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
+        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0])
         label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
         return tau_t, p_t, label_hist
    
@@ -86,7 +86,7 @@ class SelfAdaptiveThresholdLoss:
         probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
-        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
+        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w])
 
         loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
 
