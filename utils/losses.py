@@ -36,13 +36,15 @@ class SelfAdaptiveFairnessLoss:
         max_idx_s = torch.argmax(probs_ulb_s, dim=-1)
         
         # Calculate the histogram of strong logits acc. to Eq. 9
-        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1])
+        # Cast it to the dtype of the strong logits to remove the error of division of float by long
+        histogram = torch.bincount(max_idx_s, minlength=logits_ulb_s.shape[1]).to(logits_ulb_s.dtype)
         histogram /= histogram.sum()
 
         # Eq. 11 of the paper.
         p_t = p_t.reshape(1, -1)
         label_hist = label_hist.reshape(1, -1)
         
+        # Divide by the Sum Norm for both the weak and strong augmentations
         scaler_p_t = self.__check__nans__(1 / label_hist).detach()
         modulate_p_t = p_t * scaler_p_t
         modulate_p_t /= modulate_p_t.sum(dim=-1, keepdim=True)
@@ -51,6 +53,7 @@ class SelfAdaptiveFairnessLoss:
         modulate_prob_s = probs_ulb_s.mean(dim=0, keepdim=True) * scaler_prob_s
         modulate_prob_s /= modulate_prob_s.sum(dim=-1, keepdim=True)
         
+        # Cross entropy loss between two Sum Norm logits. 
         loss = (modulate_p_t * torch.log(modulate_prob_s + 1e-9)).sum(dim=1).mean()
         
         return loss, histogram.mean()
@@ -70,11 +73,14 @@ class SelfAdaptiveThresholdLoss:
     @torch.no_grad()
     def __update__params__(self, logits_ulb_w, tau_t, p_t, label_hist):
         
+        # Updating the histogram for the SAF loss here so that I dont have to call the torch.no_grad() function again. 
+        # You can do it in the SAF loss also, but without accumulating the gradient through the weak augmented logits
+        
         probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t = tau_t * self.sat_ema + (1. - self.sat_ema) * max_probs_w.mean()
         p_t = p_t * self.sat_ema + (1. - self.sat_ema) * probs_ulb_w.mean(dim=0)
-        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0])
+        histogram = torch.bincount(max_idx_w, minlength=p_t.shape[0]).to(p_t.dtype)
         label_hist = label_hist * self.sat_ema + (1. - self.sat_ema) * (histogram / histogram.sum())
         return tau_t, p_t, label_hist
    
@@ -86,7 +92,7 @@ class SelfAdaptiveThresholdLoss:
         probs_ulb_w = torch.softmax(logits_ulb_w, dim=-1)
         max_probs_w, max_idx_w = torch.max(probs_ulb_w, dim=-1)
         tau_t_c = (p_t / torch.max(p_t, dim=-1)[0])
-        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w])
+        mask = max_probs_w.ge(tau_t * tau_t_c[max_idx_w]).to(max_probs_w.dtype)
 
         loss = self.criterion(logits_ulb_s, max_idx_w, mask=mask)
 
